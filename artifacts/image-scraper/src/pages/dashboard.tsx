@@ -577,7 +577,7 @@ export default function Dashboard() {
                       </div>
 
                       <img 
-                        src={img.url} 
+                        src={`/api/scraper/images/${img.id}/download`}
                         alt={img.alt || "Scraped image"} 
                         className="max-w-full max-h-full object-contain relative z-10 drop-shadow-md pointer-events-none"
                         loading="lazy"
