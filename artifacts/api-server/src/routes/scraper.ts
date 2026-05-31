@@ -278,33 +278,45 @@ router.post("/scraper/verify-login", async (req: Request, res: Response) => {
     const html = response.data as string;
     const $ = cheerio.load(html);
 
-    // IPS forums show a "Sign Out" link when logged in and "Sign In" when not
-    const pageText = $.text().toLowerCase();
-    const hasSignOut =
-      $('a[href*="do=logout"], a[href*="sign-out"], a[href*="signout"]').length > 0 ||
-      pageText.includes("sign out") ||
-      pageText.includes("log out") ||
-      pageText.includes("logout");
-    const hasSignIn =
-      $('a[href*="login"], a[href*="sign-in"], a[href*="signin"]').length > 0 &&
-      !hasSignOut;
+    // ── IPS4 login detection ─────────────────────────────────────────────────
+    // IPS4 injects a logout link when authenticated
+    const hasLogoutLink =
+      $('a[href*="do=logout"]').length > 0 ||
+      $('a[href*="&do=logout"]').length > 0;
 
-    // Also try to find the username from IPS user bar
+    // IPS4 renders a login/register link for guests
+    const hasLoginLink =
+      $('a[href*="app=core&module=system&controller=login"]').length > 0 ||
+      $('a[href*="controller=login"]').length > 0;
+
+    // IPS4 embeds the member username in several places when logged in
     const username =
-      $("[data-ipsMenu-appendTo] .cUserLink").first().text().trim() ||
-      $(".ipsUserPhoto").first().attr("alt")?.trim() ||
       $(".cUserLink").first().text().trim() ||
+      $(".ipsUserPhoto[alt]").first().attr("alt")?.trim() ||
+      $('[data-ipsMenu] .ipsUserPhoto').first().attr("alt")?.trim() ||
       null;
 
-    const loggedIn = hasSignOut || (!hasSignIn && cookies.length > 0 && username !== null);
+    // Cookie-level hint: IPS4 sets ips4_member_id for authenticated sessions
+    const hasMemberIdCookie = /ips4_member_id\s*=\s*[^;]+/.test(cookies);
+    const hasSessionCookie = /ips4_IPSSessionFront\s*=\s*[^;]+/.test(cookies);
 
-    res.json({
-      loggedIn,
-      username: username || null,
-      message: loggedIn
-        ? `Authenticated${username ? ` as ${username}` : ""}`
-        : "Not logged in — the site returned a guest view. Check your cookie and try again.",
-    });
+    const loggedIn = hasLogoutLink || (hasMemberIdCookie && hasSessionCookie) || (!hasLoginLink && (hasMemberIdCookie || username !== null));
+
+    let message: string;
+    if (loggedIn) {
+      message = `Authenticated${username ? ` as "${username}"` : ""}`;
+    } else if (!hasSessionCookie && !hasMemberIdCookie) {
+      message =
+        "Session cookies not found in what you pasted. " +
+        "Make sure to copy the Cookie value from the Network tab (not the browser console) — " +
+        "the console omits HttpOnly cookies like ips4_IPSSessionFront that are required to log in.";
+    } else {
+      message =
+        "The site returned a guest view. Your session may have expired — " +
+        "try logging in again and copying fresh cookies from the Network tab.";
+    }
+
+    res.json({ loggedIn, username: username || null, message });
   } catch (err) {
     res.status(502).json({
       loggedIn: false,

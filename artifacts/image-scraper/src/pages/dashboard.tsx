@@ -240,15 +240,22 @@ export default function Dashboard() {
           {showCookieInput && (
             <div className="px-5 pb-5 flex flex-col gap-4 border-t border-border/50">
               <div className="pt-4 flex flex-col gap-3">
-                <div className="text-xs text-muted-foreground bg-background/60 border border-border/50 rounded p-3 flex flex-col gap-1.5 leading-relaxed">
-                  <p className="font-semibold text-foreground">How to get your session cookie:</p>
+                <div className="text-xs text-muted-foreground bg-background/60 border border-border/50 rounded p-3 flex flex-col gap-2 leading-relaxed">
+                  <p className="font-semibold text-foreground">How to get your session cookie (Network tab method):</p>
                   <ol className="list-decimal list-inside flex flex-col gap-1 pl-1">
-                    <li>Open <strong>thecandidplanet.com</strong> in Chrome or Firefox and log in.</li>
-                    <li>Press <kbd className="bg-muted px-1 py-0.5 rounded text-[10px]">F12</kbd> to open DevTools → go to the <strong>Network</strong> tab.</li>
-                    <li>Reload the page, then click any request to thecandidplanet.com.</li>
-                    <li>Under <strong>Request Headers</strong>, find <strong>Cookie</strong> and copy its full value.</li>
-                    <li>Paste it in the box below.</li>
+                    <li>Log into <strong>thecandidplanet.com</strong> in your browser.</li>
+                    <li>Press <kbd className="bg-muted px-1 py-0.5 rounded text-[10px]">F12</kbd> → click the <strong>Network</strong> tab.</li>
+                    <li>Reload the page (<kbd className="bg-muted px-1 py-0.5 rounded text-[10px]">F5</kbd>).</li>
+                    <li>Click the <strong>first request</strong> in the list (type: <em>document</em>).</li>
+                    <li>In the right panel, scroll to <strong>Request Headers</strong> → find <strong>Cookie</strong>.</li>
+                    <li>Right-click the Cookie value → <strong>Copy value</strong>, then paste below.</li>
                   </ol>
+                  <div className="flex items-start gap-1.5 mt-1 bg-destructive/10 border border-destructive/20 rounded px-2.5 py-2 text-destructive">
+                    <XCircle size={12} className="mt-0.5 shrink-0" />
+                    <span>
+                      <strong>Do not use the browser console</strong> (<code>document.cookie</code>) — it intentionally hides HttpOnly cookies like <code>ips4_IPSSessionFront</code> which are required to authenticate.
+                    </span>
+                  </div>
                 </div>
 
                 <textarea
