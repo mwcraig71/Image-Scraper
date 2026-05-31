@@ -9,7 +9,7 @@ import {
   getGetScrapeImagesQueryKey 
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Play, RotateCcw, Download, Image as ImageIcon, Link as LinkIcon, AlertCircle, Activity, Box, DownloadCloud, CheckSquare, Square, SlidersHorizontal, KeyRound, ChevronDown, ChevronUp, ShieldCheck, XCircle, Loader2 } from "lucide-react";
+import { Play, RotateCcw, Download, Image as ImageIcon, Link as LinkIcon, AlertCircle, Activity, Box, DownloadCloud, CheckSquare, Square, SlidersHorizontal, KeyRound, ChevronDown, ChevronUp, ShieldCheck, XCircle, Loader2, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Card, CardContent } from "@/components/ui/card";
@@ -50,19 +50,29 @@ export default function Dashboard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── bookmarklet: set href imperatively to bypass React's javascript: block ─
+  // ── bookmarklet code (set via ref to bypass React's javascript: block) ─────
   const bookmarkletRef = useRef<HTMLAnchorElement>(null);
+  const [bookmarkletCopied, setBookmarkletCopied] = useState(false);
+  const bookmarkletCode = useRef("");
   useEffect(() => {
-    if (!bookmarkletRef.current) return;
     const appUrl = window.location.origin + window.location.pathname;
-    const code = `(function(){` +
+    bookmarkletCode.current =
+      `javascript:(function(){` +
       `var c=document.cookie;` +
       `if(!c){alert('No cookies found \u2014 make sure you are logged in to thecandidplanet.com');return;}` +
       `window.open(${JSON.stringify(appUrl)}+'?cookies='+encodeURIComponent(c),'_blank');` +
       `})();`;
-    // setAttribute bypasses React's javascript: URL security block
-    bookmarkletRef.current.setAttribute("href", `javascript:${code}`);
+    if (bookmarkletRef.current) {
+      bookmarkletRef.current.setAttribute("href", bookmarkletCode.current);
+    }
   }, []);
+
+  const copyBookmarklet = () => {
+    navigator.clipboard.writeText(bookmarkletCode.current).then(() => {
+      setBookmarkletCopied(true);
+      setTimeout(() => setBookmarkletCopied(false), 2500);
+    });
+  };
 
   // ── remote data ──────────────────────────────────────────────────────────
   const { data: statusData } = useGetScrapeStatus({
@@ -278,22 +288,28 @@ export default function Dashboard() {
               <div className="pt-4 flex flex-col gap-3">
                 {/* ── Option 1: Bookmarklet ── */}
                 <div className="flex flex-col gap-2.5 bg-primary/5 border border-primary/20 rounded p-3 text-xs">
-                  <p className="font-semibold text-foreground">Option 1 — One-click capture (easiest)</p>
-                  <p className="text-muted-foreground leading-relaxed">
-                    Drag the button below to your browser's bookmarks bar. Then go to{" "}
-                    <strong>thecandidplanet.com</strong>, log in, and click the bookmark — it will open this app with your cookies already filled in.
-                  </p>
-                  <div className="flex items-center gap-3">
-                    <a
-                      ref={bookmarkletRef}
-                      draggable
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-primary/50 bg-primary/10 text-primary font-semibold cursor-grab active:cursor-grabbing select-none hover:bg-primary/20 transition-colors"
-                      title="Drag this to your bookmarks bar"
+                  <p className="font-semibold text-foreground">Option 1 — Bookmark capture (easiest, one-time setup)</p>
+                  <ol className="text-muted-foreground flex flex-col gap-1.5 pl-1 leading-relaxed list-decimal list-inside">
+                    <li>Click <strong className="text-foreground">Copy Code</strong> below.</li>
+                    <li>Right-click your browser's bookmarks bar → <strong className="text-foreground">Add page…</strong> (or "Add bookmark").</li>
+                    <li>Set the <strong className="text-foreground">Name</strong> to anything (e.g. <em>Capture Cookies</em>).</li>
+                    <li>Paste the copied code into the <strong className="text-foreground">URL</strong> field → Save.</li>
+                    <li>Go to <strong className="text-foreground">thecandidplanet.com</strong>, log in, click your new bookmark → this app opens with cookies pre-filled.</li>
+                  </ol>
+                  <div className="flex items-center gap-2 pt-0.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs gap-1.5 border-primary/40 text-primary hover:border-primary"
+                      onClick={copyBookmarklet}
                     >
-                      <KeyRound size={12} />
-                      Capture Cookies
-                    </a>
-                    <span className="text-muted-foreground">← drag this to your bookmarks bar</span>
+                      {bookmarkletCopied
+                        ? <><Check size={12} /> Copied!</>
+                        : <><Copy size={12} /> Copy Code</>}
+                    </Button>
+                    {/* hidden anchor kept so the href is set — not shown to user */}
+                    <a ref={bookmarkletRef} className="hidden" aria-hidden="true" />
+                    <span className="text-muted-foreground">then paste as a bookmark URL</span>
                   </div>
                 </div>
 
