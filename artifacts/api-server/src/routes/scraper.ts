@@ -42,8 +42,9 @@ const state: ScrapeState = {
   images: [],
 };
 
-function resetState() {
-  state.sessionId = randomUUID();
+function resetState(): string {
+  const newSessionId = randomUUID();
+  state.sessionId = newSessionId;
   state.status = "idle";
   state.pagesVisited = 0;
   state.pagesQueued = 0;
@@ -51,6 +52,7 @@ function resetState() {
   state.currentUrl = null;
   state.errorMessage = null;
   state.images = [];
+  return newSessionId;
 }
 
 function normalizeUrl(href: string, base: string): string | null {
@@ -88,7 +90,6 @@ function isImageUrl(url: string): boolean {
 
 function extractCssImageUrls(css: string, base: string): string[] {
   const urls: string[] = [];
-  // Match url('...'), url("..."), url(...)
   const regex = /url\(\s*(['"]?)([^'")\s]+)\1\s*\)/gi;
   let match: RegExpExecArray | null;
   while ((match = regex.exec(css)) !== null) {
@@ -102,7 +103,17 @@ function extractCssImageUrls(css: string, base: string): string[] {
   return urls;
 }
 
-function addImage(url: string, sourcePageUrl: string, imageUrls: Set<string>, alt: string | null = null, width: number | null = null, height: number | null = null) {
+function addImage(
+  url: string,
+  sourcePageUrl: string,
+  imageUrls: Set<string>,
+  sessionId: string,
+  alt: string | null = null,
+  width: number | null = null,
+  height: number | null = null,
+) {
+  // Guard: only write if this crawl's session is still the active one
+  if (state.sessionId !== sessionId) return;
   if (!imageUrls.has(url)) {
     imageUrls.add(url);
     state.images.push({ id: randomUUID(), url, sourcePageUrl, alt, width, height });
@@ -110,19 +121,28 @@ function addImage(url: string, sourcePageUrl: string, imageUrls: Set<string>, al
   }
 }
 
-async function crawl() {
+async function crawl(sessionId: string) {
   const visited = new Set<string>();
   const imageUrls = new Set<string>();
   const queue: string[] = [TARGET_URL];
 
   state.pagesQueued = 1;
 
-  while (queue.length > 0 && state.pagesVisited < MAX_PAGES && state.status === "running") {
+  while (
+    queue.length > 0 &&
+    state.pagesVisited < MAX_PAGES &&
+    state.status === "running" &&
+    state.sessionId === sessionId  // stop if reset/new session started
+  ) {
     const batch = queue.splice(0, CONCURRENCY);
     const results = await Promise.allSettled(
       batch.map(async (pageUrl) => {
         if (visited.has(pageUrl)) return [];
         visited.add(pageUrl);
+
+        // Re-check session is still active before each fetch
+        if (state.sessionId !== sessionId) return [];
+
         state.currentUrl = pageUrl;
 
         const response = await axios.get(pageUrl, {
@@ -133,6 +153,9 @@ async function crawl() {
           },
           maxRedirects: 5,
         });
+
+        // Re-check after async fetch
+        if (state.sessionId !== sessionId) return [];
 
         state.pagesVisited += 1;
         const html = response.data as string;
@@ -154,7 +177,7 @@ async function crawl() {
           for (const src of candidates) {
             const normalized = normalizeImageUrl(src, pageUrl);
             if (normalized && isImageUrl(normalized)) {
-              addImage(normalized, pageUrl, imageUrls, alt, w, h);
+              addImage(normalized, pageUrl, imageUrls, sessionId, alt, w, h);
             }
           }
 
@@ -170,18 +193,18 @@ async function crawl() {
               if (src) {
                 const normalized = normalizeImageUrl(src, pageUrl);
                 if (normalized && isImageUrl(normalized)) {
-                  addImage(normalized, pageUrl, imageUrls, alt, null, null);
+                  addImage(normalized, pageUrl, imageUrls, sessionId, alt, null, null);
                 }
               }
             }
           }
         });
 
-        // ── Inline style attributes with background-image ───────────────────
+        // ── Inline style background-image ───────────────────────────────────
         $("[style]").each((_i, el) => {
           const style = $(el).attr("style") || "";
           for (const url of extractCssImageUrls(style, pageUrl)) {
-            addImage(url, pageUrl, imageUrls, null, null, null);
+            addImage(url, pageUrl, imageUrls, sessionId, null, null, null);
           }
         });
 
@@ -189,7 +212,7 @@ async function crawl() {
         $("style").each((_i, el) => {
           const css = $(el).text();
           for (const url of extractCssImageUrls(css, pageUrl)) {
-            addImage(url, pageUrl, imageUrls, null, null, null);
+            addImage(url, pageUrl, imageUrls, sessionId, null, null, null);
           }
         });
 
@@ -209,6 +232,8 @@ async function crawl() {
       })
     );
 
+    if (state.sessionId !== sessionId) break;
+
     for (const result of results) {
       if (result.status === "fulfilled" && result.value) {
         for (const link of result.value) {
@@ -221,7 +246,8 @@ async function crawl() {
     }
   }
 
-  if (state.status === "running") {
+  // Only finalize status if this session is still active
+  if (state.sessionId === sessionId && state.status === "running") {
     state.status = "done";
     state.currentUrl = null;
   }
@@ -234,13 +260,15 @@ router.post("/scraper/start", (_req: Request, res: Response) => {
     return;
   }
 
-  resetState();
+  const sessionId = resetState();
   state.status = "running";
 
-  crawl().catch((err: unknown) => {
-    state.status = "error";
-    state.errorMessage = err instanceof Error ? err.message : String(err);
-    state.currentUrl = null;
+  crawl(sessionId).catch((err: unknown) => {
+    if (state.sessionId === sessionId) {
+      state.status = "error";
+      state.errorMessage = err instanceof Error ? err.message : String(err);
+      state.currentUrl = null;
+    }
   });
 
   res.json({ sessionId: state.sessionId, status: state.status, message: "Scrape started" });
@@ -266,11 +294,47 @@ router.get("/scraper/images", (_req: Request, res: Response) => {
 
 // POST /api/scraper/reset
 router.post("/scraper/reset", (_req: Request, res: Response) => {
-  if (state.status === "running") {
-    state.status = "idle"; // signal crawl loop to stop
+  // Generating a new sessionId causes any in-flight crawl to stop writing
+  const sessionId = resetState();
+  res.json({ sessionId, status: state.status, message: "Reset successful" });
+});
+
+// GET /api/scraper/images/:id/download — server-side proxy for cross-origin downloads
+router.get("/scraper/images/:id/download", async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const image = state.images.find((img) => img.id === id);
+
+  if (!image) {
+    res.status(404).json({ error: "Image not found" });
+    return;
   }
-  resetState();
-  res.json({ sessionId: state.sessionId, status: state.status, message: "Reset successful" });
+
+  try {
+    const upstream = await axios.get(image.url, {
+      responseType: "stream",
+      timeout: REQUEST_TIMEOUT,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; ImageScraper/1.0)",
+        Accept: "image/*,*/*",
+      },
+    });
+
+    const contentType =
+      (upstream.headers["content-type"] as string | undefined) || "application/octet-stream";
+    const ext = contentType.split("/")[1]?.split(";")[0]?.trim() || "jpg";
+    const filename = `image-${id.slice(0, 8)}.${ext}`;
+
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Cache-Control", "no-cache");
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+    (upstream.data as NodeJS.ReadableStream).pipe(res);
+  } catch {
+    if (!res.headersSent) {
+      res.status(502).json({ error: "Failed to fetch image from origin" });
+    }
+  }
 });
 
 // GET /api/scraper/download-zip — streams a zip of all found images
@@ -289,9 +353,6 @@ router.get("/scraper/download-zip", async (_req: Request, res: Response) => {
 
   archive.on("error", (err: archiver.ArchiverError) => {
     console.error("Archive error:", err);
-    if (!res.headersSent) {
-      res.status(500).json({ error: "Failed to create zip" });
-    }
   });
 
   const BATCH = 5;

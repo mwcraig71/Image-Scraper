@@ -209,7 +209,7 @@ export default function Dashboard() {
                     />
                     <div className="absolute inset-0 bg-background/80 opacity-0 group-hover:opacity-100 transition-opacity z-20 flex items-center justify-center backdrop-blur-sm">
                       <Button asChild variant="secondary" className="gap-2 font-sans font-bold shadow-xl">
-                        <a href={img.url} download data-testid={`button-download-image-${img.id}`}>
+                        <a href={`/api/scraper/images/${img.id}/download`} download data-testid={`button-download-image-${img.id}`}>
                           <Download size={16} />
                           Download
                         </a>

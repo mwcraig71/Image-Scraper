@@ -69,3 +69,12 @@ export const ResetScrapeResponse = zod.object({
 })
 
 
+/**
+ * Fetches the image server-side and returns it as an attachment so cross-origin download works reliably
+ * @summary Download a single image via server proxy
+ */
+export const DownloadImageParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+
