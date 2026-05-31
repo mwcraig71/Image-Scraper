@@ -20,6 +20,7 @@ export default function Dashboard() {
   // ── filter & selection state ─────────────────────────────────────────────
   const [minSize, setMinSize] = useState(0);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [maxPages, setMaxPages] = useState(500);
 
   // ── remote data ──────────────────────────────────────────────────────────
   const { data: statusData } = useGetScrapeStatus({
@@ -43,7 +44,7 @@ export default function Dashboard() {
   const resetScrape = useResetScrape();
 
   const handleStart = () => {
-    startScrape.mutate(undefined, {
+    startScrape.mutate({ data: { maxPages } }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetScrapeStatusQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetScrapeImagesQueryKey() });
@@ -148,6 +149,21 @@ export default function Dashboard() {
           >
             <RotateCcw size={16} />
           </Button>
+
+          <div className="flex items-center gap-1.5 bg-card border border-border/60 rounded px-2.5 py-1 text-xs">
+            <span className="text-muted-foreground whitespace-nowrap">Max pages</span>
+            <input
+              type="number"
+              min={0}
+              step={100}
+              value={maxPages}
+              onChange={(e) => setMaxPages(Math.max(0, parseInt(e.target.value) || 0))}
+              disabled={isRunning}
+              title="0 = unlimited"
+              className="w-16 bg-transparent border border-border/60 rounded px-2 py-0.5 text-foreground text-right focus:outline-none focus:border-primary/60 disabled:opacity-40"
+              data-testid="input-max-pages"
+            />
+          </div>
 
           <Button 
             onClick={handleStart} 

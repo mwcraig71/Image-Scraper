@@ -5,6 +5,14 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface StartScrapeRequest {
+  /**
+     * Maximum pages to crawl. 0 means unlimited.
+     * @minimum 0
+     */
+  maxPages?: number;
+}
+
 export interface HealthStatus {
   status: string;
 }

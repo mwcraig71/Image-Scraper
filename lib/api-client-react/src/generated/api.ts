@@ -25,11 +25,12 @@ import type {
   HealthStatus,
   ScrapeSession,
   ScrapeStatus,
-  ScrapedImage
+  ScrapedImage,
+  StartScrapeRequest
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
-import type { ErrorType } from '../custom-fetch';
+import type { ErrorType , BodyType } from '../custom-fetch';
 
 type AwaitedInput<T> = PromiseLike<T> | T;
 
@@ -130,14 +131,15 @@ export const getStartScrapeUrl = () => {
  * Begins crawling the target site and returns a session ID
  * @summary Start a scraping session
  */
-export const startScrape = async ( options?: RequestInit): Promise<ScrapeSession> => {
+export const startScrape = async (startScrapeRequest?: StartScrapeRequest, options?: RequestInit): Promise<ScrapeSession> => {
 
   return customFetch<ScrapeSession>(getStartScrapeUrl(),
   {
     ...options,
-    method: 'POST'
-
-
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      startScrapeRequest,)
   }
 );}
 
@@ -145,8 +147,8 @@ export const startScrape = async ( options?: RequestInit): Promise<ScrapeSession
 
 
 export const getStartScrapeMutationOptions = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startScrape>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof startScrape>>, TError,void, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startScrape>>, TError,{data?: BodyType<StartScrapeRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startScrape>>, TError,{data?: BodyType<StartScrapeRequest>}, TContext> => {
 
 const mutationKey = ['startScrape'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -158,10 +160,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startScrape>>, void> = () => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startScrape>>, {data?: BodyType<StartScrapeRequest>}> = (props) => {
+          const {data} = props ?? {};
 
-
-          return  startScrape(requestOptions)
+          return  startScrape(data,requestOptions)
         }
 
 
@@ -172,18 +174,18 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type StartScrapeMutationResult = NonNullable<Awaited<ReturnType<typeof startScrape>>>
-
+    export type StartScrapeMutationBody = BodyType<StartScrapeRequest> | undefined
     export type StartScrapeMutationError = ErrorType<ErrorResponse>
 
     /**
  * @summary Start a scraping session
  */
 export const useStartScrape = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startScrape>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startScrape>>, TError,{data?: BodyType<StartScrapeRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof startScrape>>,
         TError,
-        void,
+        {data?: BodyType<StartScrapeRequest>},
         TContext
       > => {
       return useMutation(getStartScrapeMutationOptions(options));

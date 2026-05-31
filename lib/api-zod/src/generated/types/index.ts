@@ -14,3 +14,4 @@ export * from './scrapeSession';
 export * from './scrapeSessionStatus';
 export * from './scrapeStatus';
 export * from './scrapeStatusStatus';
+export * from './startScrapeRequest';

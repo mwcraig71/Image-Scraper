@@ -21,6 +21,15 @@ export const HealthCheckResponse = zod.object({
  * Begins crawling the target site and returns a session ID
  * @summary Start a scraping session
  */
+export const startScrapeBodyMaxPagesDefault = 500;
+export const startScrapeBodyMaxPagesMin = 0;
+
+
+
+export const StartScrapeBody = zod.object({
+  "maxPages": zod.number().min(startScrapeBodyMaxPagesMin).default(startScrapeBodyMaxPagesDefault).describe('Maximum pages to crawl. 0 means unlimited.')
+})
+
 export const StartScrapeResponse = zod.object({
   "sessionId": zod.string(),
   "status": zod.enum(['idle', 'running', 'done', 'error']),

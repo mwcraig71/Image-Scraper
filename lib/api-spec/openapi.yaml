@@ -33,6 +33,12 @@ paths:
       tags: [scraper]
       summary: Start a scraping session
       description: Begins crawling the target site and returns a session ID
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartScrapeRequest"
       responses:
         "200":
           description: Scrape session started
@@ -154,6 +160,15 @@ paths:
 
 components:
   schemas:
+    StartScrapeRequest:
+      type: object
+      properties:
+        maxPages:
+          type: integer
+          minimum: 0
+          description: Maximum pages to crawl. 0 means unlimited.
+          default: 500
+
     HealthStatus:
       type: object
       properties:

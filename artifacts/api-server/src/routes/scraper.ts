@@ -7,7 +7,7 @@ import { randomUUID } from "crypto";
 const router: IRouter = Router();
 
 const TARGET_URL = "https://www.thecandidplanet.com/";
-const MAX_PAGES = 100;
+const DEFAULT_MAX_PAGES = 500;
 const CONCURRENCY = 3;
 const REQUEST_TIMEOUT = 15000;
 
@@ -121,7 +121,7 @@ function addImage(
   }
 }
 
-async function crawl(sessionId: string) {
+async function crawl(sessionId: string, maxPages: number) {
   const visited = new Set<string>();
   const imageUrls = new Set<string>();
   const queue: string[] = [TARGET_URL];
@@ -130,7 +130,7 @@ async function crawl(sessionId: string) {
 
   while (
     queue.length > 0 &&
-    state.pagesVisited < MAX_PAGES &&
+    (maxPages === 0 || state.pagesVisited < maxPages) &&
     state.status === "running" &&
     state.sessionId === sessionId  // stop if reset/new session started
   ) {
@@ -254,16 +254,22 @@ async function crawl(sessionId: string) {
 }
 
 // POST /api/scraper/start
-router.post("/scraper/start", (_req: Request, res: Response) => {
+router.post("/scraper/start", (req: Request, res: Response) => {
   if (state.status === "running") {
     res.status(409).json({ error: "A scrape is already in progress" });
     return;
   }
 
+  const body = req.body as { maxPages?: number } | undefined;
+  const maxPages =
+    typeof body?.maxPages === "number" && body.maxPages >= 0
+      ? body.maxPages
+      : DEFAULT_MAX_PAGES;
+
   const sessionId = resetState();
   state.status = "running";
 
-  crawl(sessionId).catch((err: unknown) => {
+  crawl(sessionId, maxPages).catch((err: unknown) => {
     if (state.sessionId === sessionId) {
       state.status = "error";
       state.errorMessage = err instanceof Error ? err.message : String(err);
