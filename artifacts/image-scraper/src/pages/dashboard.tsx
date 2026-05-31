@@ -50,15 +50,18 @@ export default function Dashboard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── bookmarklet href (computed once from current origin) ──────────────────
-  const bookmarkletHref = useMemo(() => {
+  // ── bookmarklet: set href imperatively to bypass React's javascript: block ─
+  const bookmarkletRef = useRef<HTMLAnchorElement>(null);
+  useEffect(() => {
+    if (!bookmarkletRef.current) return;
     const appUrl = window.location.origin + window.location.pathname;
     const code = `(function(){` +
       `var c=document.cookie;` +
-      `if(!c){alert('No cookies found — make sure you are logged in to thecandidplanet.com');return;}` +
+      `if(!c){alert('No cookies found \u2014 make sure you are logged in to thecandidplanet.com');return;}` +
       `window.open(${JSON.stringify(appUrl)}+'?cookies='+encodeURIComponent(c),'_blank');` +
       `})();`;
-    return `javascript:${encodeURIComponent(code)}`;
+    // setAttribute bypasses React's javascript: URL security block
+    bookmarkletRef.current.setAttribute("href", `javascript:${code}`);
   }, []);
 
   // ── remote data ──────────────────────────────────────────────────────────
@@ -282,8 +285,7 @@ export default function Dashboard() {
                   </p>
                   <div className="flex items-center gap-3">
                     <a
-                      href={bookmarkletHref}
-                      onClick={(e) => e.preventDefault()}
+                      ref={bookmarkletRef}
                       draggable
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-primary/50 bg-primary/10 text-primary font-semibold cursor-grab active:cursor-grabbing select-none hover:bg-primary/20 transition-colors"
                       title="Drag this to your bookmarks bar"
