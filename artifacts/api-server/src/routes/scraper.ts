@@ -163,6 +163,8 @@ function addImage(
 ) {
   // Guard: only write if this crawl's session is still the active one
   if (state.sessionId !== sessionId) return;
+  // Skip inline data URIs (e.g. SVG avatars encoded as data:image/svg+xml,…)
+  if (url.startsWith("data:")) return;
   // Skip images whose known dimensions fall below the threshold
   if (minDimension > 0 && width !== null && height !== null) {
     if (width < minDimension || height < minDimension) return;
