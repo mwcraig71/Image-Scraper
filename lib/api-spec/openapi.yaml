@@ -91,6 +91,27 @@ paths:
               schema:
                 $ref: "#/components/schemas/ScrapeSession"
 
+  /scraper/download-zip:
+    get:
+      operationId: downloadImagesZip
+      tags: [scraper]
+      summary: Download all images as a zip archive
+      description: Streams a zip file containing all discovered images
+      responses:
+        "200":
+          description: Zip archive of all discovered images
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: No images to download
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     HealthStatus:

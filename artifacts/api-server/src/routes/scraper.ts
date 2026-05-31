@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import axios from "axios";
 import * as cheerio from "cheerio";
-import { ZipArchive } from "archiver";
+import archiver from "archiver";
 import { randomUUID } from "crypto";
 
 const router: IRouter = Router();
@@ -56,10 +56,8 @@ function resetState() {
 function normalizeUrl(href: string, base: string): string | null {
   try {
     const url = new URL(href, base);
-    // Only follow same-origin links
     const target = new URL(TARGET_URL);
     if (url.hostname !== target.hostname) return null;
-    // Strip hash and normalize
     url.hash = "";
     return url.toString();
   } catch {
@@ -76,6 +74,42 @@ function normalizeImageUrl(src: string, base: string): string | null {
   }
 }
 
+function isImageUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    const pathname = u.pathname.toLowerCase();
+    if (/\.(jpe?g|png|gif|webp|svg|bmp|avif|tiff?)(\?|$)/i.test(pathname)) return true;
+    if (url.startsWith("data:image/")) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function extractCssImageUrls(css: string, base: string): string[] {
+  const urls: string[] = [];
+  // Match url('...'), url("..."), url(...)
+  const regex = /url\(\s*(['"]?)([^'")\s]+)\1\s*\)/gi;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(css)) !== null) {
+    const rawUrl = match[2];
+    if (!rawUrl || rawUrl.startsWith("data:")) continue;
+    const normalized = normalizeImageUrl(rawUrl, base);
+    if (normalized && isImageUrl(normalized)) {
+      urls.push(normalized);
+    }
+  }
+  return urls;
+}
+
+function addImage(url: string, sourcePageUrl: string, imageUrls: Set<string>, alt: string | null = null, width: number | null = null, height: number | null = null) {
+  if (!imageUrls.has(url)) {
+    imageUrls.add(url);
+    state.images.push({ id: randomUUID(), url, sourcePageUrl, alt, width, height });
+    state.imagesFound += 1;
+  }
+}
+
 async function crawl() {
   const visited = new Set<string>();
   const imageUrls = new Set<string>();
@@ -84,11 +118,10 @@ async function crawl() {
   state.pagesQueued = 1;
 
   while (queue.length > 0 && state.pagesVisited < MAX_PAGES && state.status === "running") {
-    // Process up to CONCURRENCY pages in parallel
     const batch = queue.splice(0, CONCURRENCY);
     const results = await Promise.allSettled(
       batch.map(async (pageUrl) => {
-        if (visited.has(pageUrl)) return;
+        if (visited.has(pageUrl)) return [];
         visited.add(pageUrl);
         state.currentUrl = pageUrl;
 
@@ -96,7 +129,7 @@ async function crawl() {
           timeout: REQUEST_TIMEOUT,
           headers: {
             "User-Agent": "Mozilla/5.0 (compatible; ImageScraper/1.0)",
-            "Accept": "text/html,application/xhtml+xml",
+            Accept: "text/html,application/xhtml+xml",
           },
           maxRedirects: 5,
         });
@@ -105,50 +138,62 @@ async function crawl() {
         const html = response.data as string;
         const $ = cheerio.load(html);
 
-        // Collect image URLs from <img> tags
+        // ── <img> tags ──────────────────────────────────────────────────────
         $("img").each((_i, el) => {
-          const src = $(el).attr("src") || $(el).attr("data-src") || $(el).attr("data-lazy-src");
-          const srcset = $(el).attr("srcset") || $(el).attr("data-srcset");
           const alt = $(el).attr("alt") || null;
+          const w = parseInt($(el).attr("width") || "0") || null;
+          const h = parseInt($(el).attr("height") || "0") || null;
 
-          if (src) {
+          const candidates = [
+            $(el).attr("src"),
+            $(el).attr("data-src"),
+            $(el).attr("data-lazy-src"),
+            $(el).attr("data-original"),
+          ].filter(Boolean) as string[];
+
+          for (const src of candidates) {
             const normalized = normalizeImageUrl(src, pageUrl);
-            if (normalized && !imageUrls.has(normalized) && isImageUrl(normalized)) {
-              imageUrls.add(normalized);
-              state.images.push({
-                id: randomUUID(),
-                url: normalized,
-                sourcePageUrl: pageUrl,
-                alt,
-                width: parseInt($(el).attr("width") || "0") || null,
-                height: parseInt($(el).attr("height") || "0") || null,
-              });
-              state.imagesFound += 1;
+            if (normalized && isImageUrl(normalized)) {
+              addImage(normalized, pageUrl, imageUrls, alt, w, h);
             }
           }
 
-          // Parse srcset for additional image URLs
-          if (srcset) {
-            const srcsetParts = srcset.split(",").map((s) => s.trim().split(/\s+/)[0]);
-            for (const srcsetSrc of srcsetParts) {
-              const normalized = normalizeImageUrl(srcsetSrc, pageUrl);
-              if (normalized && !imageUrls.has(normalized) && isImageUrl(normalized)) {
-                imageUrls.add(normalized);
-                state.images.push({
-                  id: randomUUID(),
-                  url: normalized,
-                  sourcePageUrl: pageUrl,
-                  alt,
-                  width: null,
-                  height: null,
-                });
-                state.imagesFound += 1;
+          // srcset
+          const srcsets = [
+            $(el).attr("srcset"),
+            $(el).attr("data-srcset"),
+          ].filter(Boolean) as string[];
+
+          for (const srcset of srcsets) {
+            for (const part of srcset.split(",")) {
+              const src = part.trim().split(/\s+/)[0];
+              if (src) {
+                const normalized = normalizeImageUrl(src, pageUrl);
+                if (normalized && isImageUrl(normalized)) {
+                  addImage(normalized, pageUrl, imageUrls, alt, null, null);
+                }
               }
             }
           }
         });
 
-        // Collect internal links for further crawling
+        // ── Inline style attributes with background-image ───────────────────
+        $("[style]").each((_i, el) => {
+          const style = $(el).attr("style") || "";
+          for (const url of extractCssImageUrls(style, pageUrl)) {
+            addImage(url, pageUrl, imageUrls, null, null, null);
+          }
+        });
+
+        // ── <style> blocks ──────────────────────────────────────────────────
+        $("style").each((_i, el) => {
+          const css = $(el).text();
+          for (const url of extractCssImageUrls(css, pageUrl)) {
+            addImage(url, pageUrl, imageUrls, null, null, null);
+          }
+        });
+
+        // ── Internal links for further crawling ─────────────────────────────
         const newLinks: string[] = [];
         $("a[href]").each((_i, el) => {
           const href = $(el).attr("href");
@@ -182,20 +227,6 @@ async function crawl() {
   }
 }
 
-function isImageUrl(url: string): boolean {
-  try {
-    const u = new URL(url);
-    const pathname = u.pathname.toLowerCase();
-    // Accept common image extensions or image-serving paths
-    if (/\.(jpe?g|png|gif|webp|svg|bmp|avif|tiff?)(\?|$)/i.test(pathname)) return true;
-    // Accept data URIs
-    if (url.startsWith("data:image/")) return true;
-    return false;
-  } catch {
-    return false;
-  }
-}
-
 // POST /api/scraper/start
 router.post("/scraper/start", (_req: Request, res: Response) => {
   if (state.status === "running") {
@@ -206,18 +237,13 @@ router.post("/scraper/start", (_req: Request, res: Response) => {
   resetState();
   state.status = "running";
 
-  // Fire and forget — crawl runs in background
-  crawl().catch((err) => {
+  crawl().catch((err: unknown) => {
     state.status = "error";
     state.errorMessage = err instanceof Error ? err.message : String(err);
     state.currentUrl = null;
   });
 
-  res.json({
-    sessionId: state.sessionId,
-    status: state.status,
-    message: "Scrape started",
-  });
+  res.json({ sessionId: state.sessionId, status: state.status, message: "Scrape started" });
 });
 
 // GET /api/scraper/status
@@ -244,11 +270,7 @@ router.post("/scraper/reset", (_req: Request, res: Response) => {
     state.status = "idle"; // signal crawl loop to stop
   }
   resetState();
-  res.json({
-    sessionId: state.sessionId,
-    status: state.status,
-    message: "Reset successful",
-  });
+  res.json({ sessionId: state.sessionId, status: state.status, message: "Reset successful" });
 });
 
 // GET /api/scraper/download-zip — streams a zip of all found images
@@ -262,17 +284,16 @@ router.get("/scraper/download-zip", async (_req: Request, res: Response) => {
   res.setHeader("Content-Type", "application/zip");
   res.setHeader("Content-Disposition", 'attachment; filename="scraped-images.zip"');
 
-  const archive = new ZipArchive({ zlib: { level: 6 } });
+  const archive = archiver("zip", { zlib: { level: 6 } });
   archive.pipe(res);
 
-  archive.on("error", (err) => {
+  archive.on("error", (err: archiver.ArchiverError) => {
     console.error("Archive error:", err);
     if (!res.headersSent) {
       res.status(500).json({ error: "Failed to create zip" });
     }
   });
 
-  // Download and add each image concurrently in small batches
   const BATCH = 5;
   for (let i = 0; i < images.length; i += BATCH) {
     const batch = images.slice(i, i + BATCH);
@@ -285,8 +306,8 @@ router.get("/scraper/download-zip", async (_req: Request, res: Response) => {
             headers: { "User-Agent": "Mozilla/5.0 (compatible; ImageScraper/1.0)" },
           });
           const ext = (img.url.split("?")[0].split(".").pop() || "jpg").toLowerCase();
-          const safeName = img.id + "." + ext;
-          archive.append(response.data, { name: safeName });
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+          archive.append(response.data as import("stream").Readable, { name: `${img.id}.${ext}` });
         } catch {
           // Skip images that fail to download
         }

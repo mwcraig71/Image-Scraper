@@ -415,3 +415,81 @@ export const useResetScrape = <TError = ErrorType<unknown>,
       return useMutation(getResetScrapeMutationOptions(options));
     }
 
+export const getDownloadImagesZipUrl = () => {
+
+
+
+
+  return `/api/scraper/download-zip`
+}
+
+/**
+ * Streams a zip file containing all discovered images
+ * @summary Download all images as a zip archive
+ */
+export const downloadImagesZip = async ( options?: RequestInit): Promise<Blob> => {
+
+  return customFetch<Blob>(getDownloadImagesZipUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getDownloadImagesZipQueryKey = () => {
+    return [
+    `/api/scraper/download-zip`
+    ] as const;
+    }
+
+
+export const getDownloadImagesZipQueryOptions = <TData = Awaited<ReturnType<typeof downloadImagesZip>>, TError = ErrorType<ErrorResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadImagesZip>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDownloadImagesZipQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof downloadImagesZip>>> = ({ signal }) => downloadImagesZip({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof downloadImagesZip>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type DownloadImagesZipQueryResult = NonNullable<Awaited<ReturnType<typeof downloadImagesZip>>>
+export type DownloadImagesZipQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Download all images as a zip archive
+ */
+
+export function useDownloadImagesZip<TData = Awaited<ReturnType<typeof downloadImagesZip>>, TError = ErrorType<ErrorResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadImagesZip>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getDownloadImagesZipQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
