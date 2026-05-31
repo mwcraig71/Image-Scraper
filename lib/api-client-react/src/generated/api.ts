@@ -27,6 +27,7 @@ import type {
   ScrapeSession,
   ScrapeStatus,
   ScrapedImage,
+  ScrapedVideo,
   StartScrapeRequest,
   VerifyLoginRequest
 } from './api.schemas';
@@ -409,6 +410,84 @@ export function useGetScrapeImages<TData = Awaited<ReturnType<typeof getScrapeIm
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetScrapeImagesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetScrapeVideosUrl = () => {
+
+
+
+
+  return `/api/scraper/videos`
+}
+
+/**
+ * Returns the full list of video links found so far
+ * @summary Get all discovered videos
+ */
+export const getScrapeVideos = async ( options?: RequestInit): Promise<ScrapedVideo[]> => {
+
+  return customFetch<ScrapedVideo[]>(getGetScrapeVideosUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetScrapeVideosQueryKey = () => {
+    return [
+    `/api/scraper/videos`
+    ] as const;
+    }
+
+
+export const getGetScrapeVideosQueryOptions = <TData = Awaited<ReturnType<typeof getScrapeVideos>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getScrapeVideos>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetScrapeVideosQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getScrapeVideos>>> = ({ signal }) => getScrapeVideos({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getScrapeVideos>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetScrapeVideosQueryResult = NonNullable<Awaited<ReturnType<typeof getScrapeVideos>>>
+export type GetScrapeVideosQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get all discovered videos
+ */
+
+export function useGetScrapeVideos<TData = Awaited<ReturnType<typeof getScrapeVideos>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getScrapeVideos>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetScrapeVideosQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

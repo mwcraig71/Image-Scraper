@@ -67,6 +67,7 @@ export const GetScrapeStatusResponse = zod.object({
   "pagesVisited": zod.number(),
   "pagesQueued": zod.number(),
   "imagesFound": zod.number(),
+  "videosFound": zod.number(),
   "currentUrl": zod.string().nullable(),
   "errorMessage": zod.string().nullable()
 })
@@ -85,6 +86,19 @@ export const GetScrapeImagesResponseItem = zod.object({
   "height": zod.number().nullable()
 })
 export const GetScrapeImagesResponse = zod.array(GetScrapeImagesResponseItem)
+
+
+/**
+ * Returns the full list of video links found so far
+ * @summary Get all discovered videos
+ */
+export const GetScrapeVideosResponseItem = zod.object({
+  "id": zod.string(),
+  "url": zod.string(),
+  "sourcePageUrl": zod.string(),
+  "filename": zod.string()
+})
+export const GetScrapeVideosResponse = zod.array(GetScrapeVideosResponseItem)
 
 
 /**

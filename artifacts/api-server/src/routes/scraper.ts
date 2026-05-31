@@ -24,15 +24,24 @@ interface ScrapedImage {
   height: number | null;
 }
 
+interface ScrapedVideo {
+  id: string;
+  url: string;
+  sourcePageUrl: string;
+  filename: string;
+}
+
 interface ScrapeState {
   sessionId: string;
   status: "idle" | "running" | "done" | "error";
   pagesVisited: number;
   pagesQueued: number;
   imagesFound: number;
+  videosFound: number;
   currentUrl: string | null;
   errorMessage: string | null;
   images: ScrapedImage[];
+  videos: ScrapedVideo[];
 }
 
 const state: ScrapeState = {
@@ -41,9 +50,11 @@ const state: ScrapeState = {
   pagesVisited: 0,
   pagesQueued: 0,
   imagesFound: 0,
+  videosFound: 0,
   currentUrl: null,
   errorMessage: null,
   images: [],
+  videos: [],
 };
 
 function resetState(): string {
@@ -53,9 +64,11 @@ function resetState(): string {
   state.pagesVisited = 0;
   state.pagesQueued = 0;
   state.imagesFound = 0;
+  state.videosFound = 0;
   state.currentUrl = null;
   state.errorMessage = null;
   state.images = [];
+  state.videos = [];
   return newSessionId;
 }
 
@@ -89,6 +102,37 @@ function isImageUrl(url: string): boolean {
     return false;
   } catch {
     return false;
+  }
+}
+
+function isVideoUrl(url: string): boolean {
+  try {
+    const pathname = new URL(url).pathname.toLowerCase();
+    return /\.(mp4|webm|mov|avi|mkv|m4v|ogv|wmv|flv|m2ts|ts)(\?|$)/i.test(pathname);
+  } catch {
+    return false;
+  }
+}
+
+function videoFilename(url: string): string {
+  try {
+    return decodeURIComponent(new URL(url).pathname.split("/").pop() || url);
+  } catch {
+    return url;
+  }
+}
+
+function addVideo(
+  url: string,
+  sourcePageUrl: string,
+  videoUrls: Set<string>,
+  sessionId: string,
+) {
+  if (state.sessionId !== sessionId) return;
+  if (!videoUrls.has(url)) {
+    videoUrls.add(url);
+    state.videos.push({ id: randomUUID(), url, sourcePageUrl, filename: videoFilename(url) });
+    state.videosFound += 1;
   }
 }
 
@@ -187,6 +231,7 @@ async function probeImageDimensions(
 async function crawl(sessionId: string, maxPages: number, minDimension: number, cookies: string) {
   const visited = new Set<string>();
   const imageUrls = new Set<string>();
+  const videoUrls = new Set<string>();
   const queue: string[] = [TARGET_URL];
 
   state.pagesQueued = 1;
@@ -289,6 +334,29 @@ async function crawl(sessionId: string, maxPages: number, minDimension: number, 
           const css = $(el).text();
           for (const url of extractCssImageUrls(css, pageUrl)) {
             queueUnknown(url, null);
+          }
+        });
+
+        // ── <video> tags and <a> links to video files ───────────────────────
+        $("video[src], video source[src]").each((_i, el) => {
+          const src = $(el).attr("src");
+          if (src) {
+            const normalized = normalizeImageUrl(src, pageUrl);
+            if (normalized && isVideoUrl(normalized)) {
+              addVideo(normalized, pageUrl, videoUrls, sessionId);
+            }
+          }
+        });
+
+        $("a[href]").each((_i, el) => {
+          const href = $(el).attr("href");
+          if (href) {
+            try {
+              const normalized = new URL(href, pageUrl).toString();
+              if (isVideoUrl(normalized)) {
+                addVideo(normalized, pageUrl, videoUrls, sessionId);
+              }
+            } catch { /* skip malformed */ }
           }
         });
 
@@ -459,6 +527,7 @@ router.get("/scraper/status", (_req: Request, res: Response) => {
     pagesVisited: state.pagesVisited,
     pagesQueued: state.pagesQueued,
     imagesFound: state.imagesFound,
+    videosFound: state.videosFound,
     currentUrl: state.currentUrl,
     errorMessage: state.errorMessage,
   });
@@ -467,6 +536,11 @@ router.get("/scraper/status", (_req: Request, res: Response) => {
 // GET /api/scraper/images
 router.get("/scraper/images", (_req: Request, res: Response) => {
   res.json(state.images);
+});
+
+// GET /api/scraper/videos
+router.get("/scraper/videos", (_req: Request, res: Response) => {
+  res.json(state.videos);
 });
 
 // POST /api/scraper/reset

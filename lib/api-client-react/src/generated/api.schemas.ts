@@ -56,6 +56,7 @@ export interface ScrapeStatus {
   pagesVisited: number;
   pagesQueued: number;
   imagesFound: number;
+  videosFound: number;
   /** @nullable */
   currentUrl: string | null;
   /** @nullable */
@@ -84,6 +85,13 @@ export interface LoginVerifyResult {
   /** @nullable */
   username: string | null;
   message: string;
+}
+
+export interface ScrapedVideo {
+  id: string;
+  url: string;
+  sourcePageUrl: string;
+  filename: string;
 }
 
 export interface ErrorResponse {

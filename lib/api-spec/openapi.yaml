@@ -109,6 +109,22 @@ paths:
                 items:
                   $ref: "#/components/schemas/ScrapedImage"
 
+  /scraper/videos:
+    get:
+      operationId: getScrapeVideos
+      tags: [scraper]
+      summary: Get all discovered videos
+      description: Returns the full list of video links found so far
+      responses:
+        "200":
+          description: List of discovered videos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ScrapedVideo"
+
   /scraper/reset:
     post:
       operationId: resetScrape
@@ -239,6 +255,8 @@ components:
           type: integer
         imagesFound:
           type: integer
+        videosFound:
+          type: integer
         currentUrl:
           type: ["string", "null"]
         errorMessage:
@@ -249,6 +267,7 @@ components:
         - pagesVisited
         - pagesQueued
         - imagesFound
+        - videosFound
         - currentUrl
         - errorMessage
 
@@ -295,6 +314,23 @@ components:
         - loggedIn
         - username
         - message
+
+    ScrapedVideo:
+      type: object
+      properties:
+        id:
+          type: string
+        url:
+          type: string
+        sourcePageUrl:
+          type: string
+        filename:
+          type: string
+      required:
+        - id
+        - url
+        - sourcePageUrl
+        - filename
 
     ErrorResponse:
       type: object

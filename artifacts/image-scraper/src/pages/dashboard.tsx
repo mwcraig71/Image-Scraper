@@ -2,14 +2,16 @@ import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { 
   useStartScrape, 
   useGetScrapeStatus, 
-  useGetScrapeImages, 
+  useGetScrapeImages,
+  useGetScrapeVideos,
   useResetScrape,
   useVerifyLogin,
   getGetScrapeStatusQueryKey, 
-  getGetScrapeImagesQueryKey 
+  getGetScrapeImagesQueryKey,
+  getGetScrapeVideosQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Play, RotateCcw, Download, Image as ImageIcon, Link as LinkIcon, AlertCircle, Activity, Box, DownloadCloud, CheckSquare, Square, SlidersHorizontal, KeyRound, ChevronDown, ChevronUp, ShieldCheck, XCircle, Loader2, Copy, Check } from "lucide-react";
+import { Play, RotateCcw, Download, Image as ImageIcon, Link as LinkIcon, AlertCircle, Activity, Box, DownloadCloud, CheckSquare, Square, SlidersHorizontal, KeyRound, ChevronDown, ChevronUp, ShieldCheck, XCircle, Loader2, Copy, Check, Film, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Card, CardContent } from "@/components/ui/card";
@@ -89,6 +91,16 @@ export default function Dashboard() {
         return currentStatus?.status === "running" ? 2000 : false;
       },
       queryKey: getGetScrapeImagesQueryKey(),
+    }
+  });
+
+  const { data: videosData } = useGetScrapeVideos({
+    query: {
+      refetchInterval: () => {
+        const currentStatus = queryClient.getQueryData<{ status: string }>(getGetScrapeStatusQueryKey());
+        return currentStatus?.status === "running" ? 2000 : false;
+      },
+      queryKey: getGetScrapeVideosQueryKey(),
     }
   });
 
@@ -405,7 +417,7 @@ export default function Dashboard() {
             </Badge>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="flex flex-col gap-1 p-3 bg-background/50 rounded border border-border/50">
               <span className="text-xs text-muted-foreground">Pages Visited</span>
               <span className="text-2xl text-primary font-bold">{statusData?.pagesVisited ?? 0}</span>
@@ -417,6 +429,10 @@ export default function Dashboard() {
             <div className="flex flex-col gap-1 p-3 bg-background/50 rounded border border-border/50">
               <span className="text-xs text-muted-foreground">Images Found</span>
               <span className="text-2xl text-primary font-bold">{statusData?.imagesFound ?? 0}</span>
+            </div>
+            <div className="flex flex-col gap-1 p-3 bg-background/50 rounded border border-border/50">
+              <span className="text-xs text-muted-foreground">Videos Found</span>
+              <span className="text-2xl text-primary font-bold">{statusData?.videosFound ?? 0}</span>
             </div>
           </div>
 
@@ -614,6 +630,62 @@ export default function Dashboard() {
           )}
 
         </section>
+
+        {/* Videos Section */}
+        {((videosData?.length ?? 0) > 0 || isRunning) && (
+          <section className="bg-card border border-border rounded-lg p-5 flex flex-col gap-4 shadow-xl shadow-black/50">
+            <div className="flex items-center gap-2">
+              <Film size={16} className="text-primary" />
+              <h2 className="text-sm font-semibold text-foreground uppercase tracking-widest">
+                Discovered Videos
+              </h2>
+              <span className="text-xs text-muted-foreground font-normal ml-1">
+                {videosData?.length ?? 0} total
+              </span>
+            </div>
+
+            {(videosData?.length ?? 0) === 0 && isRunning && (
+              <p className="text-xs text-muted-foreground">Scanning for video links…</p>
+            )}
+
+            {(videosData?.length ?? 0) > 0 && (
+              <div className="flex flex-col divide-y divide-border/40">
+                {videosData!.map((vid) => (
+                  <div key={vid.id} className="flex items-center gap-3 py-2.5 group">
+                    <Film size={14} className="text-muted-foreground shrink-0" />
+                    <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                      <span className="text-xs font-mono text-foreground truncate" title={vid.filename}>
+                        {vid.filename}
+                      </span>
+                      <a
+                        href={vid.sourcePageUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[10px] text-muted-foreground hover:text-primary truncate"
+                        title={vid.sourcePageUrl}
+                      >
+                        {vid.sourcePageUrl}
+                      </a>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button asChild variant="ghost" size="sm" className="h-7 text-xs gap-1">
+                        <a href={vid.url} target="_blank" rel="noreferrer">
+                          <ExternalLink size={12} /> Open
+                        </a>
+                      </Button>
+                      <Button asChild variant="secondary" size="sm" className="h-7 text-xs gap-1">
+                        <a href={vid.url} download>
+                          <Download size={12} /> Download
+                        </a>
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
       </main>
     </div>
   );

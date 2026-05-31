@@ -11,6 +11,7 @@ export * from './errorResponse';
 export * from './healthStatus';
 export * from './loginVerifyResult';
 export * from './scrapedImage';
+export * from './scrapedVideo';
 export * from './scrapeSession';
 export * from './scrapeSessionStatus';
 export * from './scrapeStatus';

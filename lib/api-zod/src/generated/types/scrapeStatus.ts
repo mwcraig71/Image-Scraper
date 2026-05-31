@@ -13,6 +13,7 @@ export interface ScrapeStatus {
   pagesVisited: number;
   pagesQueued: number;
   imagesFound: number;
+  videosFound: number;
   /** @nullable */
   currentUrl: string | null;
   /** @nullable */
