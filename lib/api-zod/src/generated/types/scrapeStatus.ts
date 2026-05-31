@@ -10,6 +10,8 @@ import type { ScrapeStatusStatus } from './scrapeStatusStatus';
 export interface ScrapeStatus {
   sessionId: string;
   status: ScrapeStatusStatus;
+  /** @nullable */
+  targetUrl: string | null;
   pagesVisited: number;
   pagesQueued: number;
   imagesFound: number;

@@ -7,6 +7,8 @@
  */
 
 export interface StartScrapeRequest {
+  /** Starting URL for the crawl. The scraper will stay within the same hostname. */
+  targetUrl?: string;
   /**
      * Maximum pages to crawl. 0 means unlimited.
      * @minimum 0

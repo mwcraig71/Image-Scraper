@@ -7,7 +7,6 @@ import { imageSize } from "image-size";
 
 const router: IRouter = Router();
 
-const TARGET_URL = "https://www.thecandidplanet.com/";
 const DEFAULT_MAX_PAGES = 500;
 const CONCURRENCY = 3;
 const REQUEST_TIMEOUT = 15000;
@@ -34,6 +33,7 @@ interface ScrapedVideo {
 interface ScrapeState {
   sessionId: string;
   status: "idle" | "running" | "done" | "error";
+  targetUrl: string | null;
   pagesVisited: number;
   pagesQueued: number;
   imagesFound: number;
@@ -47,6 +47,7 @@ interface ScrapeState {
 const state: ScrapeState = {
   sessionId: "none",
   status: "idle",
+  targetUrl: null,
   pagesVisited: 0,
   pagesQueued: 0,
   imagesFound: 0,
@@ -61,6 +62,7 @@ function resetState(): string {
   const newSessionId = randomUUID();
   state.sessionId = newSessionId;
   state.status = "idle";
+  state.targetUrl = null;
   state.pagesVisited = 0;
   state.pagesQueued = 0;
   state.imagesFound = 0;
@@ -72,10 +74,10 @@ function resetState(): string {
   return newSessionId;
 }
 
-function normalizeUrl(href: string, base: string): string | null {
+function normalizeUrl(href: string, base: string, targetUrl: string): string | null {
   try {
     const url = new URL(href, base);
-    const target = new URL(TARGET_URL);
+    const target = new URL(targetUrl);
     if (url.hostname !== target.hostname) return null;
     url.hash = "";
     return url.toString();
@@ -230,11 +232,11 @@ async function probeImageDimensions(
   }
 }
 
-async function crawl(sessionId: string, maxPages: number, minDimension: number, cookies: string) {
+async function crawl(sessionId: string, targetUrl: string, maxPages: number, minDimension: number, cookies: string) {
   const visited = new Set<string>();
   const imageUrls = new Set<string>();
   const videoUrls = new Set<string>();
-  const queue: string[] = [TARGET_URL];
+  const queue: string[] = [targetUrl];
 
   state.pagesQueued = 1;
 
@@ -390,7 +392,7 @@ async function crawl(sessionId: string, maxPages: number, minDimension: number, 
         $("a[href]").each((_i, el) => {
           const href = $(el).attr("href");
           if (href) {
-            const normalized = normalizeUrl(href, pageUrl);
+            const normalized = normalizeUrl(href, pageUrl, targetUrl);
             if (normalized && !visited.has(normalized) && !queue.includes(normalized)) {
               newLinks.push(normalized);
             }
@@ -428,7 +430,8 @@ router.post("/scraper/verify-login", async (req: Request, res: Response) => {
   const cookies = typeof body?.cookies === "string" ? body.cookies.trim() : "";
 
   try {
-    const response = await axios.get(TARGET_URL, {
+    const verifyTarget = state.targetUrl ?? "https://www.thecandidplanet.com/";
+    const response = await axios.get(verifyTarget, {
       timeout: REQUEST_TIMEOUT,
       headers: {
         "User-Agent": "Mozilla/5.0 (compatible; ImageScraper/1.0)",
@@ -484,7 +487,7 @@ router.post("/scraper/verify-login", async (req: Request, res: Response) => {
     res.status(502).json({
       loggedIn: false,
       username: null,
-      message: `Could not reach ${TARGET_URL}: ${err instanceof Error ? err.message : String(err)}`,
+      message: `Could not reach the target site: ${err instanceof Error ? err.message : String(err)}`,
     });
   }
 });
@@ -496,7 +499,16 @@ router.post("/scraper/start", (req: Request, res: Response) => {
     return;
   }
 
-  const body = req.body as { maxPages?: number; minDimension?: number; cookies?: string } | undefined;
+  const body = req.body as { targetUrl?: string; maxPages?: number; minDimension?: number; cookies?: string } | undefined;
+  const rawTarget = typeof body?.targetUrl === "string" ? body.targetUrl.trim() : "";
+  let targetUrl: string;
+  try {
+    // Ensure it's a valid absolute URL; default to a safe fallback only if blank
+    targetUrl = rawTarget ? new URL(rawTarget).toString() : "https://example.com/";
+  } catch {
+    res.status(400).json({ error: "Invalid targetUrl — must be a full URL including https://" });
+    return;
+  }
   const maxPages =
     typeof body?.maxPages === "number" && body.maxPages >= 0
       ? body.maxPages
@@ -509,8 +521,9 @@ router.post("/scraper/start", (req: Request, res: Response) => {
 
   const sessionId = resetState();
   state.status = "running";
+  state.targetUrl = targetUrl;
 
-  crawl(sessionId, maxPages, minDimension, cookies).catch((err: unknown) => {
+  crawl(sessionId, targetUrl, maxPages, minDimension, cookies).catch((err: unknown) => {
     if (state.sessionId === sessionId) {
       state.status = "error";
       state.errorMessage = err instanceof Error ? err.message : String(err);
@@ -526,6 +539,7 @@ router.get("/scraper/status", (_req: Request, res: Response) => {
   res.json({
     sessionId: state.sessionId,
     status: state.status,
+    targetUrl: state.targetUrl,
     pagesVisited: state.pagesVisited,
     pagesQueued: state.pagesQueued,
     imagesFound: state.imagesFound,

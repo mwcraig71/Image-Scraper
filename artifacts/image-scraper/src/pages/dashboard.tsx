@@ -25,6 +25,7 @@ export default function Dashboard() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [maxPages, setMaxPages] = useState(500);
   const [minScrapeSize, setMinScrapeSize] = useState(0);
+  const [targetUrl, setTargetUrl] = useState("https://www.thecandidplanet.com/");
   const [cookies, setCookies] = useState("");
   const [showCookieInput, setShowCookieInput] = useState(false);
   const verifyLogin = useVerifyLogin();
@@ -61,7 +62,7 @@ export default function Dashboard() {
     bookmarkletCode.current =
       `javascript:(function(){` +
       `var c=document.cookie;` +
-      `if(!c){alert('No cookies found \u2014 make sure you are logged in to thecandidplanet.com');return;}` +
+      `if(!c){alert('No cookies found \u2014 make sure you are logged in to the target site first');return;}` +
       `window.open(${JSON.stringify(appUrl)}+'?cookies='+encodeURIComponent(c),'_blank');` +
       `})();`;
     if (bookmarkletRef.current) {
@@ -108,7 +109,7 @@ export default function Dashboard() {
   const resetScrape = useResetScrape();
 
   const handleStart = () => {
-    startScrape.mutate({ data: { maxPages, minDimension: minScrapeSize, cookies: cookies.trim() || undefined } }, {
+    startScrape.mutate({ data: { targetUrl: targetUrl.trim() || undefined, maxPages, minDimension: minScrapeSize, cookies: cookies.trim() || undefined } }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetScrapeStatusQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetScrapeImagesQueryKey() });
@@ -178,10 +179,7 @@ export default function Dashboard() {
           <div className="w-8 h-8 rounded bg-primary text-primary-foreground flex items-center justify-center font-bold">
             <Box size={18} />
           </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-primary">Image Scraper</h1>
-            <p className="text-xs text-muted-foreground font-sans">Target: thecandidplanet.com</p>
-          </div>
+          <h1 className="text-xl font-bold tracking-tight text-primary">Image Scraper</h1>
         </div>
 
         <div className="flex items-center gap-3">
@@ -213,6 +211,20 @@ export default function Dashboard() {
           >
             <RotateCcw size={16} />
           </Button>
+
+          <div className="flex items-center gap-1.5 bg-card border border-border/60 rounded px-2.5 py-1 text-xs">
+            <span className="text-muted-foreground whitespace-nowrap">URL</span>
+            <input
+              type="url"
+              value={targetUrl}
+              onChange={(e) => setTargetUrl(e.target.value)}
+              disabled={isRunning}
+              placeholder="https://example.com/"
+              title="Starting URL to scrape. The crawler stays within the same domain."
+              className="w-52 bg-transparent border border-border/60 rounded px-2 py-0.5 text-foreground focus:outline-none focus:border-primary/60 disabled:opacity-40"
+              data-testid="input-target-url"
+            />
+          </div>
 
           <div className="flex items-center gap-1.5 bg-card border border-border/60 rounded px-2.5 py-1 text-xs">
             <span className="text-muted-foreground whitespace-nowrap">Min image</span>
@@ -306,7 +318,7 @@ export default function Dashboard() {
                     <li>Right-click your browser's bookmarks bar → <strong className="text-foreground">Add page…</strong> (or "Add bookmark").</li>
                     <li>Set the <strong className="text-foreground">Name</strong> to anything (e.g. <em>Capture Cookies</em>).</li>
                     <li>Paste the copied code into the <strong className="text-foreground">URL</strong> field → Save.</li>
-                    <li>Go to <strong className="text-foreground">thecandidplanet.com</strong>, log in, click your new bookmark → this app opens with cookies pre-filled.</li>
+                    <li>Go to the target site, log in, click your new bookmark → this app opens with cookies pre-filled.</li>
                   </ol>
                   <div className="flex items-center gap-2 pt-0.5">
                     <Button
@@ -329,7 +341,7 @@ export default function Dashboard() {
                 <div className="text-xs text-muted-foreground bg-background/60 border border-border/50 rounded p-3 flex flex-col gap-2 leading-relaxed">
                   <p className="font-semibold text-foreground">Option 2 — Network tab (works for all cookies)</p>
                   <ol className="list-decimal list-inside flex flex-col gap-1 pl-1">
-                    <li>Log into <strong>thecandidplanet.com</strong> in your browser.</li>
+                    <li>Log into the target site in your browser.</li>
                     <li>Press <kbd className="bg-muted px-1 py-0.5 rounded text-[10px]">F12</kbd> → click the <strong>Network</strong> tab.</li>
                     <li>Reload the page (<kbd className="bg-muted px-1 py-0.5 rounded text-[10px]">F5</kbd>).</li>
                     <li>Click the <strong>first request</strong> in the list (type: <em>document</em>).</li>
@@ -370,7 +382,7 @@ export default function Dashboard() {
 
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-[10px] text-muted-foreground">
-                    Cookies are only kept in memory and sent directly to thecandidplanet.com — never stored or logged.
+                    Cookies are only kept in memory and sent directly to the target site — never stored or logged.
                   </p>
                   <div className="flex items-center gap-2 shrink-0">
                     {cookies.trim() && (

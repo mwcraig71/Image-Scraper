@@ -30,6 +30,7 @@ export const startScrapeBodyMinDimensionMin = 0;
 
 
 export const StartScrapeBody = zod.object({
+  "targetUrl": zod.string().optional().describe('Starting URL for the crawl. The scraper will stay within the same hostname.'),
   "maxPages": zod.number().min(startScrapeBodyMaxPagesMin).default(startScrapeBodyMaxPagesDefault).describe('Maximum pages to crawl. 0 means unlimited.'),
   "minDimension": zod.number().min(startScrapeBodyMinDimensionMin).default(startScrapeBodyMinDimensionDefault).describe('Minimum width AND height (px) an image must have to be collected. 0 means no limit. Only applies when dimensions are known from HTML attributes.'),
   "cookies": zod.string().optional().describe('Raw Cookie header value to send with every request (e.g. \"session_id=abc; other=xyz\"). Lets the scraper access pages that require a login.')
@@ -64,6 +65,7 @@ export const VerifyLoginResponse = zod.object({
 export const GetScrapeStatusResponse = zod.object({
   "sessionId": zod.string(),
   "status": zod.enum(['idle', 'running', 'done', 'error']),
+  "targetUrl": zod.string().nullable(),
   "pagesVisited": zod.number(),
   "pagesQueued": zod.number(),
   "imagesFound": zod.number(),

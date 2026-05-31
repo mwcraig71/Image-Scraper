@@ -205,6 +205,9 @@ components:
     StartScrapeRequest:
       type: object
       properties:
+        targetUrl:
+          type: string
+          description: Starting URL for the crawl. The scraper will stay within the same hostname.
         maxPages:
           type: integer
           minimum: 0
@@ -249,6 +252,8 @@ components:
         status:
           type: string
           enum: [idle, running, done, error]
+        targetUrl:
+          type: ["string", "null"]
         pagesVisited:
           type: integer
         pagesQueued:
@@ -264,6 +269,7 @@ components:
       required:
         - sessionId
         - status
+        - targetUrl
         - pagesVisited
         - pagesQueued
         - imagesFound
