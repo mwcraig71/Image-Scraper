@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { 
   useStartScrape, 
   useGetScrapeStatus, 
@@ -27,6 +27,39 @@ export default function Dashboard() {
   const [showCookieInput, setShowCookieInput] = useState(false);
   const verifyLogin = useVerifyLogin();
   const verifyResult = verifyLogin.data;
+
+  // ── bookmarklet: auto-fill cookies from ?cookies= URL param ──────────────
+  const didAutoFill = useRef(false);
+  useEffect(() => {
+    if (didAutoFill.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const captured = params.get("cookies");
+    if (captured) {
+      didAutoFill.current = true;
+      setCookies(captured);
+      setShowCookieInput(true);
+      // strip the param from the URL without a reload
+      params.delete("cookies");
+      const newSearch = params.toString();
+      window.history.replaceState({}, "", window.location.pathname + (newSearch ? `?${newSearch}` : ""));
+      // auto-verify after state settles
+      setTimeout(() => {
+        verifyLogin.mutate({ data: { cookies: captured } });
+      }, 100);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── bookmarklet href (computed once from current origin) ──────────────────
+  const bookmarkletHref = useMemo(() => {
+    const appUrl = window.location.origin + window.location.pathname;
+    const code = `(function(){` +
+      `var c=document.cookie;` +
+      `if(!c){alert('No cookies found — make sure you are logged in to thecandidplanet.com');return;}` +
+      `window.open(${JSON.stringify(appUrl)}+'?cookies='+encodeURIComponent(c),'_blank');` +
+      `})();`;
+    return `javascript:${encodeURIComponent(code)}`;
+  }, []);
 
   // ── remote data ──────────────────────────────────────────────────────────
   const { data: statusData } = useGetScrapeStatus({
@@ -240,20 +273,43 @@ export default function Dashboard() {
           {showCookieInput && (
             <div className="px-5 pb-5 flex flex-col gap-4 border-t border-border/50">
               <div className="pt-4 flex flex-col gap-3">
+                {/* ── Option 1: Bookmarklet ── */}
+                <div className="flex flex-col gap-2.5 bg-primary/5 border border-primary/20 rounded p-3 text-xs">
+                  <p className="font-semibold text-foreground">Option 1 — One-click capture (easiest)</p>
+                  <p className="text-muted-foreground leading-relaxed">
+                    Drag the button below to your browser's bookmarks bar. Then go to{" "}
+                    <strong>thecandidplanet.com</strong>, log in, and click the bookmark — it will open this app with your cookies already filled in.
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <a
+                      href={bookmarkletHref}
+                      onClick={(e) => e.preventDefault()}
+                      draggable
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-primary/50 bg-primary/10 text-primary font-semibold cursor-grab active:cursor-grabbing select-none hover:bg-primary/20 transition-colors"
+                      title="Drag this to your bookmarks bar"
+                    >
+                      <KeyRound size={12} />
+                      Capture Cookies
+                    </a>
+                    <span className="text-muted-foreground">← drag this to your bookmarks bar</span>
+                  </div>
+                </div>
+
+                {/* ── Option 2: Network tab ── */}
                 <div className="text-xs text-muted-foreground bg-background/60 border border-border/50 rounded p-3 flex flex-col gap-2 leading-relaxed">
-                  <p className="font-semibold text-foreground">How to get your session cookie (Network tab method):</p>
+                  <p className="font-semibold text-foreground">Option 2 — Network tab (works for all cookies)</p>
                   <ol className="list-decimal list-inside flex flex-col gap-1 pl-1">
                     <li>Log into <strong>thecandidplanet.com</strong> in your browser.</li>
                     <li>Press <kbd className="bg-muted px-1 py-0.5 rounded text-[10px]">F12</kbd> → click the <strong>Network</strong> tab.</li>
                     <li>Reload the page (<kbd className="bg-muted px-1 py-0.5 rounded text-[10px]">F5</kbd>).</li>
                     <li>Click the <strong>first request</strong> in the list (type: <em>document</em>).</li>
-                    <li>In the right panel, scroll to <strong>Request Headers</strong> → find <strong>Cookie</strong>.</li>
-                    <li>Right-click the Cookie value → <strong>Copy value</strong>, then paste below.</li>
+                    <li>In the right panel → <strong>Request Headers</strong> → find <strong>Cookie</strong>.</li>
+                    <li>Right-click the value → <strong>Copy value</strong> → paste below.</li>
                   </ol>
-                  <div className="flex items-start gap-1.5 mt-1 bg-destructive/10 border border-destructive/20 rounded px-2.5 py-2 text-destructive">
-                    <XCircle size={12} className="mt-0.5 shrink-0" />
+                  <div className="flex items-start gap-1.5 mt-0.5 bg-amber-500/10 border border-amber-500/20 rounded px-2.5 py-2 text-amber-400">
+                    <AlertCircle size={12} className="mt-0.5 shrink-0" />
                     <span>
-                      <strong>Do not use the browser console</strong> (<code>document.cookie</code>) — it intentionally hides HttpOnly cookies like <code>ips4_IPSSessionFront</code> which are required to authenticate.
+                      The bookmarklet can only capture non-HttpOnly cookies. If verify still fails, use the Network tab method which captures all cookies including <code>ips4_IPSSessionFront</code>.
                     </span>
                   </div>
                 </div>
