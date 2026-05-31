@@ -560,6 +560,16 @@ router.get("/scraper/videos", (_req: Request, res: Response) => {
 });
 
 // POST /api/scraper/reset
+router.post("/scraper/stop", (_req: Request, res: Response) => {
+  if (state.status !== "running") {
+    res.status(409).json({ error: "No scrape is currently running" });
+    return;
+  }
+  state.status = "done";
+  state.currentUrl = null;
+  res.json({ sessionId: state.sessionId, status: state.status, message: "Scrape stopped" });
+});
+
 router.post("/scraper/reset", (_req: Request, res: Response) => {
   // Generating a new sessionId causes any in-flight crawl to stop writing
   const sessionId = resetState();

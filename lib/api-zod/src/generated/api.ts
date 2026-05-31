@@ -104,6 +104,17 @@ export const GetScrapeVideosResponse = zod.array(GetScrapeVideosResponseItem)
 
 
 /**
+ * Signals the active crawl to stop after the current batch finishes. Results collected so far are preserved.
+ * @summary Stop a running scrape
+ */
+export const StopScrapeResponse = zod.object({
+  "sessionId": zod.string(),
+  "status": zod.enum(['idle', 'running', 'done', 'error']),
+  "message": zod.string().optional()
+})
+
+
+/**
  * Clears all scrape results and resets to idle state
  * @summary Reset scraper state
  */

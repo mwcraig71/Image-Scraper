@@ -5,13 +5,14 @@ import {
   useGetScrapeImages,
   useGetScrapeVideos,
   useResetScrape,
+  useStopScrape,
   useVerifyLogin,
   getGetScrapeStatusQueryKey, 
   getGetScrapeImagesQueryKey,
   getGetScrapeVideosQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Play, RotateCcw, Download, Image as ImageIcon, Link as LinkIcon, AlertCircle, Activity, Box, DownloadCloud, CheckSquare, Square, SlidersHorizontal, KeyRound, ChevronDown, ChevronUp, ShieldCheck, XCircle, Loader2, Copy, Check, Film, ExternalLink } from "lucide-react";
+import { Play, Square as StopIcon, RotateCcw, Download, Image as ImageIcon, Link as LinkIcon, AlertCircle, Activity, Box, DownloadCloud, CheckSquare, Square, SlidersHorizontal, KeyRound, ChevronDown, ChevronUp, ShieldCheck, XCircle, Loader2, Copy, Check, Film, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Card, CardContent } from "@/components/ui/card";
@@ -106,7 +107,16 @@ export default function Dashboard() {
   });
 
   const startScrape = useStartScrape();
+  const stopScrape = useStopScrape();
   const resetScrape = useResetScrape();
+
+  const handleStop = () => {
+    stopScrape.mutate(undefined, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetScrapeStatusQueryKey() });
+      }
+    });
+  };
 
   const handleStart = () => {
     startScrape.mutate({ data: { targetUrl: targetUrl.trim() || undefined, maxPages, minDimension: minScrapeSize, cookies: cookies.trim() || undefined } }, {
@@ -257,24 +267,31 @@ export default function Dashboard() {
             />
           </div>
 
-          <Button 
-            onClick={handleStart} 
-            disabled={isRunning || isDone}
-            className="gap-2 font-bold font-sans tracking-wide"
-            data-testid="button-start"
-          >
-            {isRunning ? (
-              <>
-                <Activity size={16} className="animate-pulse" />
-                Scraping...
-              </>
-            ) : (
-              <>
-                <Play size={16} />
-                Start Scraping
-              </>
-            )}
-          </Button>
+          {isRunning ? (
+            <Button
+              onClick={handleStop}
+              disabled={stopScrape.isPending}
+              variant="destructive"
+              className="gap-2 font-bold font-sans tracking-wide"
+              data-testid="button-stop"
+            >
+              {stopScrape.isPending ? (
+                <><Loader2 size={16} className="animate-spin" /> Stopping…</>
+              ) : (
+                <><StopIcon size={16} /> Stop</>
+              )}
+            </Button>
+          ) : (
+            <Button 
+              onClick={handleStart} 
+              disabled={isDone}
+              className="gap-2 font-bold font-sans tracking-wide"
+              data-testid="button-start"
+            >
+              <Play size={16} />
+              Start Scraping
+            </Button>
+          )}
         </div>
       </header>
 

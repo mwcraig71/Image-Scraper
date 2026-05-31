@@ -500,6 +500,77 @@ export function useGetScrapeVideos<TData = Awaited<ReturnType<typeof getScrapeVi
 
 
 
+export const getStopScrapeUrl = () => {
+
+
+
+
+  return `/api/scraper/stop`
+}
+
+/**
+ * Signals the active crawl to stop after the current batch finishes. Results collected so far are preserved.
+ * @summary Stop a running scrape
+ */
+export const stopScrape = async ( options?: RequestInit): Promise<ScrapeSession> => {
+
+  return customFetch<ScrapeSession>(getStopScrapeUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getStopScrapeMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof stopScrape>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof stopScrape>>, TError,void, TContext> => {
+
+const mutationKey = ['stopScrape'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof stopScrape>>, void> = () => {
+
+
+          return  stopScrape(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StopScrapeMutationResult = NonNullable<Awaited<ReturnType<typeof stopScrape>>>
+
+    export type StopScrapeMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Stop a running scrape
+ */
+export const useStopScrape = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof stopScrape>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof stopScrape>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getStopScrapeMutationOptions(options));
+    }
+
 export const getResetScrapeUrl = () => {
 
 

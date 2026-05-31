@@ -125,6 +125,26 @@ paths:
                 items:
                   $ref: "#/components/schemas/ScrapedVideo"
 
+  /scraper/stop:
+    post:
+      operationId: stopScrape
+      tags: [scraper]
+      summary: Stop a running scrape
+      description: Signals the active crawl to stop after the current batch finishes. Results collected so far are preserved.
+      responses:
+        "200":
+          description: Stop signal sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScrapeSession"
+        "409":
+          description: No scrape is running
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /scraper/reset:
     post:
       operationId: resetScrape
