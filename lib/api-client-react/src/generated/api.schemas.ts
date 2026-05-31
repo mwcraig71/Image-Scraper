@@ -16,6 +16,8 @@ export interface StartScrapeRequest {
      * @minimum 0
      */
   minDimension?: number;
+  /** Raw Cookie header value to send with every request (e.g. "session_id=abc; other=xyz"). Lets the scraper access pages that require a login. */
+  cookies?: string;
 }
 
 export interface HealthStatus {

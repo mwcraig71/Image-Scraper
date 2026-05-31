@@ -8,7 +8,7 @@ import {
   getGetScrapeImagesQueryKey 
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Play, RotateCcw, Download, Image as ImageIcon, Link as LinkIcon, AlertCircle, Activity, Box, DownloadCloud, CheckSquare, Square, SlidersHorizontal } from "lucide-react";
+import { Play, RotateCcw, Download, Image as ImageIcon, Link as LinkIcon, AlertCircle, Activity, Box, DownloadCloud, CheckSquare, Square, SlidersHorizontal, KeyRound, ChevronDown, ChevronUp, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Card, CardContent } from "@/components/ui/card";
@@ -22,6 +22,8 @@ export default function Dashboard() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [maxPages, setMaxPages] = useState(500);
   const [minScrapeSize, setMinScrapeSize] = useState(0);
+  const [cookies, setCookies] = useState("");
+  const [showCookieInput, setShowCookieInput] = useState(false);
 
   // ── remote data ──────────────────────────────────────────────────────────
   const { data: statusData } = useGetScrapeStatus({
@@ -45,7 +47,7 @@ export default function Dashboard() {
   const resetScrape = useResetScrape();
 
   const handleStart = () => {
-    startScrape.mutate({ data: { maxPages, minDimension: minScrapeSize } }, {
+    startScrape.mutate({ data: { maxPages, minDimension: minScrapeSize, cookies: cookies.trim() || undefined } }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetScrapeStatusQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetScrapeImagesQueryKey() });
@@ -204,7 +206,78 @@ export default function Dashboard() {
       </header>
 
       <main className="w-full max-w-6xl p-6 flex flex-col gap-6">
-        
+
+        {/* Session Cookie Panel */}
+        <section className="bg-card border border-border rounded-lg shadow-xl shadow-black/50 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowCookieInput((v) => !v)}
+            className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-muted/30 transition-colors text-left"
+          >
+            <div className="flex items-center gap-2.5">
+              <KeyRound size={15} className={cookies.trim() ? "text-primary" : "text-muted-foreground"} />
+              <span className="text-sm font-semibold">
+                {cookies.trim() ? "Session Cookie set" : "Login / Session Cookie"}
+              </span>
+              {cookies.trim() && (
+                <span className="flex items-center gap-1 text-[10px] bg-primary/15 text-primary px-2 py-0.5 rounded-full">
+                  <ShieldCheck size={10} />
+                  Active
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <span className="text-xs hidden sm:inline">
+                {cookies.trim() ? "Click to edit" : "Optional — needed for login-protected pages"}
+              </span>
+              {showCookieInput ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </div>
+          </button>
+
+          {showCookieInput && (
+            <div className="px-5 pb-5 flex flex-col gap-4 border-t border-border/50">
+              <div className="pt-4 flex flex-col gap-3">
+                <div className="text-xs text-muted-foreground bg-background/60 border border-border/50 rounded p-3 flex flex-col gap-1.5 leading-relaxed">
+                  <p className="font-semibold text-foreground">How to get your session cookie:</p>
+                  <ol className="list-decimal list-inside flex flex-col gap-1 pl-1">
+                    <li>Open <strong>thecandidplanet.com</strong> in Chrome or Firefox and log in.</li>
+                    <li>Press <kbd className="bg-muted px-1 py-0.5 rounded text-[10px]">F12</kbd> to open DevTools → go to the <strong>Network</strong> tab.</li>
+                    <li>Reload the page, then click any request to thecandidplanet.com.</li>
+                    <li>Under <strong>Request Headers</strong>, find <strong>Cookie</strong> and copy its full value.</li>
+                    <li>Paste it in the box below.</li>
+                  </ol>
+                </div>
+
+                <textarea
+                  value={cookies}
+                  onChange={(e) => setCookies(e.target.value)}
+                  disabled={isRunning}
+                  placeholder="Paste your Cookie header value here, e.g. wordpress_logged_in_abc=user%7C...; other_cookie=value"
+                  rows={3}
+                  className="w-full bg-background/50 border border-border/60 rounded px-3 py-2 text-xs font-mono text-foreground placeholder:text-muted-foreground/50 resize-none focus:outline-none focus:border-primary/60 disabled:opacity-40"
+                  data-testid="input-cookies"
+                />
+
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] text-muted-foreground">
+                    Cookies are only kept in memory and sent directly to thecandidplanet.com — never stored or logged.
+                  </p>
+                  {cookies.trim() && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs h-7 text-destructive hover:text-destructive"
+                      onClick={() => setCookies("")}
+                    >
+                      Clear
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+
         {/* Status Panel */}
         <section className="bg-card border border-border rounded-lg p-5 flex flex-col gap-4 shadow-xl shadow-black/50">
           <div className="flex justify-between items-center">

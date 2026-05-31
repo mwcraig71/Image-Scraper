@@ -126,7 +126,7 @@ function addImage(
   }
 }
 
-async function crawl(sessionId: string, maxPages: number, minDimension: number) {
+async function crawl(sessionId: string, maxPages: number, minDimension: number, cookies: string) {
   const visited = new Set<string>();
   const imageUrls = new Set<string>();
   const queue: string[] = [TARGET_URL];
@@ -155,6 +155,7 @@ async function crawl(sessionId: string, maxPages: number, minDimension: number) 
           headers: {
             "User-Agent": "Mozilla/5.0 (compatible; ImageScraper/1.0)",
             Accept: "text/html,application/xhtml+xml",
+            ...(cookies ? { Cookie: cookies } : {}),
           },
           maxRedirects: 5,
         });
@@ -265,7 +266,7 @@ router.post("/scraper/start", (req: Request, res: Response) => {
     return;
   }
 
-  const body = req.body as { maxPages?: number; minDimension?: number } | undefined;
+  const body = req.body as { maxPages?: number; minDimension?: number; cookies?: string } | undefined;
   const maxPages =
     typeof body?.maxPages === "number" && body.maxPages >= 0
       ? body.maxPages
@@ -274,11 +275,12 @@ router.post("/scraper/start", (req: Request, res: Response) => {
     typeof body?.minDimension === "number" && body.minDimension >= 0
       ? body.minDimension
       : 0;
+  const cookies = typeof body?.cookies === "string" ? body.cookies.trim() : "";
 
   const sessionId = resetState();
   state.status = "running";
 
-  crawl(sessionId, maxPages, minDimension).catch((err: unknown) => {
+  crawl(sessionId, maxPages, minDimension, cookies).catch((err: unknown) => {
     if (state.sessionId === sessionId) {
       state.status = "error";
       state.errorMessage = err instanceof Error ? err.message : String(err);
