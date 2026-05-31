@@ -337,9 +337,11 @@ router.get("/scraper/images/:id/download", async (req: Request, res: Response) =
   }
 });
 
-// GET /api/scraper/download-zip — streams a zip of all found images
-router.get("/scraper/download-zip", async (_req: Request, res: Response) => {
-  const images = [...state.images];
+// GET /api/scraper/download-zip — streams a zip of all (or selected) found images
+router.get("/scraper/download-zip", async (req: Request, res: Response) => {
+  const idsParam = req.query.ids as string | undefined;
+  const idSet = idsParam ? new Set(idsParam.split(",").map((s) => s.trim()).filter(Boolean)) : null;
+  const images = idSet ? state.images.filter((img) => idSet.has(img.id)) : [...state.images];
   if (images.length === 0) {
     res.status(400).json({ error: "No images to download" });
     return;

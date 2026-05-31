@@ -63,3 +63,10 @@ export interface ErrorResponse {
   error: string;
 }
 
+export type DownloadImagesZipParams = {
+/**
+ * Comma-separated list of image IDs to include. Omit to download all.
+ */
+ids?: string;
+};
+

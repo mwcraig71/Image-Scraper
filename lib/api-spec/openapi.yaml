@@ -128,8 +128,15 @@ paths:
     get:
       operationId: downloadImagesZip
       tags: [scraper]
-      summary: Download all images as a zip archive
-      description: Streams a zip file containing all discovered images
+      summary: Download images as a zip archive
+      description: Streams a zip file containing all discovered images, or a subset when `ids` is provided
+      parameters:
+        - name: ids
+          in: query
+          required: false
+          description: Comma-separated list of image IDs to include. Omit to download all.
+          schema:
+            type: string
       responses:
         "200":
           description: Zip archive of all discovered images

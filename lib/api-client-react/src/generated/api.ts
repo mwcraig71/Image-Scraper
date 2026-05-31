@@ -20,6 +20,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  DownloadImagesZipParams,
   ErrorResponse,
   HealthStatus,
   ScrapeSession,
@@ -493,21 +494,28 @@ export function useDownloadImage<TData = Awaited<ReturnType<typeof downloadImage
 
 
 
-export const getDownloadImagesZipUrl = () => {
+export const getDownloadImagesZipUrl = (params?: DownloadImagesZipParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/scraper/download-zip`
+  return stringifiedParams.length > 0 ? `/api/scraper/download-zip?${stringifiedParams}` : `/api/scraper/download-zip`
 }
 
 /**
- * Streams a zip file containing all discovered images
- * @summary Download all images as a zip archive
+ * Streams a zip file containing all discovered images, or a subset when `ids` is provided
+ * @summary Download images as a zip archive
  */
-export const downloadImagesZip = async ( options?: RequestInit): Promise<Blob> => {
+export const downloadImagesZip = async (params?: DownloadImagesZipParams, options?: RequestInit): Promise<Blob> => {
 
-  return customFetch<Blob>(getDownloadImagesZipUrl(),
+  return customFetch<Blob>(getDownloadImagesZipUrl(params),
   {
     ...options,
     method: 'GET'
@@ -520,23 +528,23 @@ export const downloadImagesZip = async ( options?: RequestInit): Promise<Blob> =
 
 
 
-export const getDownloadImagesZipQueryKey = () => {
+export const getDownloadImagesZipQueryKey = (params?: DownloadImagesZipParams,) => {
     return [
-    `/api/scraper/download-zip`
+    `/api/scraper/download-zip`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getDownloadImagesZipQueryOptions = <TData = Awaited<ReturnType<typeof downloadImagesZip>>, TError = ErrorType<ErrorResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadImagesZip>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getDownloadImagesZipQueryOptions = <TData = Awaited<ReturnType<typeof downloadImagesZip>>, TError = ErrorType<ErrorResponse>>(params?: DownloadImagesZipParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadImagesZip>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getDownloadImagesZipQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getDownloadImagesZipQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof downloadImagesZip>>> = ({ signal }) => downloadImagesZip({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof downloadImagesZip>>> = ({ signal }) => downloadImagesZip(params, { signal, ...requestOptions });
 
 
 
@@ -550,15 +558,15 @@ export type DownloadImagesZipQueryError = ErrorType<ErrorResponse>
 
 
 /**
- * @summary Download all images as a zip archive
+ * @summary Download images as a zip archive
  */
 
 export function useDownloadImagesZip<TData = Awaited<ReturnType<typeof downloadImagesZip>>, TError = ErrorType<ErrorResponse>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadImagesZip>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ params?: DownloadImagesZipParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof downloadImagesZip>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getDownloadImagesZipQueryOptions(options)
+  const queryOptions = getDownloadImagesZipQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

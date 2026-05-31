@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './downloadImagesZipParams';
 export * from './errorResponse';
 export * from './healthStatus';
 export * from './scrapedImage';

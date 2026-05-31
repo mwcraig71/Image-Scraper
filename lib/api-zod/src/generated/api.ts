@@ -78,3 +78,12 @@ export const DownloadImageParams = zod.object({
 })
 
 
+/**
+ * Streams a zip file containing all discovered images, or a subset when `ids` is provided
+ * @summary Download images as a zip archive
+ */
+export const DownloadImagesZipQueryParams = zod.object({
+  "ids": zod.coerce.string().optional().describe('Comma-separated list of image IDs to include. Omit to download all.')
+})
+
+
