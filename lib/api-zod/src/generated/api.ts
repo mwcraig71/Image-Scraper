@@ -24,10 +24,14 @@ export const HealthCheckResponse = zod.object({
 export const startScrapeBodyMaxPagesDefault = 500;
 export const startScrapeBodyMaxPagesMin = 0;
 
+export const startScrapeBodyMinDimensionDefault = 0;
+export const startScrapeBodyMinDimensionMin = 0;
+
 
 
 export const StartScrapeBody = zod.object({
-  "maxPages": zod.number().min(startScrapeBodyMaxPagesMin).default(startScrapeBodyMaxPagesDefault).describe('Maximum pages to crawl. 0 means unlimited.')
+  "maxPages": zod.number().min(startScrapeBodyMaxPagesMin).default(startScrapeBodyMaxPagesDefault).describe('Maximum pages to crawl. 0 means unlimited.'),
+  "minDimension": zod.number().min(startScrapeBodyMinDimensionMin).default(startScrapeBodyMinDimensionDefault).describe('Minimum width AND height (px) an image must have to be collected. 0 means no limit. Only applies when dimensions are known from HTML attributes.')
 })
 
 export const StartScrapeResponse = zod.object({

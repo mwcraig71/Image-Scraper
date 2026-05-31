@@ -11,6 +11,11 @@ export interface StartScrapeRequest {
      * @minimum 0
      */
   maxPages?: number;
+  /**
+     * Minimum width AND height (px) an image must have to be collected. 0 means no limit. Only applies when dimensions are known from HTML attributes.
+     * @minimum 0
+     */
+  minDimension?: number;
 }
 
 export interface HealthStatus {

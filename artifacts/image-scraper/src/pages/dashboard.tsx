@@ -21,6 +21,7 @@ export default function Dashboard() {
   const [minSize, setMinSize] = useState(0);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [maxPages, setMaxPages] = useState(500);
+  const [minScrapeSize, setMinScrapeSize] = useState(0);
 
   // ── remote data ──────────────────────────────────────────────────────────
   const { data: statusData } = useGetScrapeStatus({
@@ -44,7 +45,7 @@ export default function Dashboard() {
   const resetScrape = useResetScrape();
 
   const handleStart = () => {
-    startScrape.mutate({ data: { maxPages } }, {
+    startScrape.mutate({ data: { maxPages, minDimension: minScrapeSize } }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetScrapeStatusQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetScrapeImagesQueryKey() });
@@ -149,6 +150,22 @@ export default function Dashboard() {
           >
             <RotateCcw size={16} />
           </Button>
+
+          <div className="flex items-center gap-1.5 bg-card border border-border/60 rounded px-2.5 py-1 text-xs">
+            <span className="text-muted-foreground whitespace-nowrap">Min image</span>
+            <input
+              type="number"
+              min={0}
+              step={50}
+              value={minScrapeSize}
+              onChange={(e) => setMinScrapeSize(Math.max(0, parseInt(e.target.value) || 0))}
+              disabled={isRunning}
+              title="Minimum width & height in px to collect. 0 = collect all."
+              className="w-16 bg-transparent border border-border/60 rounded px-2 py-0.5 text-foreground text-right focus:outline-none focus:border-primary/60 disabled:opacity-40"
+              data-testid="input-min-scrape-size"
+            />
+            <span className="text-muted-foreground">px</span>
+          </div>
 
           <div className="flex items-center gap-1.5 bg-card border border-border/60 rounded px-2.5 py-1 text-xs">
             <span className="text-muted-foreground whitespace-nowrap">Max pages</span>

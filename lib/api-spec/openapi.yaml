@@ -168,6 +168,11 @@ components:
           minimum: 0
           description: Maximum pages to crawl. 0 means unlimited.
           default: 500
+        minDimension:
+          type: integer
+          minimum: 0
+          description: Minimum width AND height (px) an image must have to be collected. 0 means no limit. Only applies when dimensions are known from HTML attributes.
+          default: 0
 
     HealthStatus:
       type: object

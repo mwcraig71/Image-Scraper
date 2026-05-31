@@ -108,12 +108,17 @@ function addImage(
   sourcePageUrl: string,
   imageUrls: Set<string>,
   sessionId: string,
+  minDimension: number,
   alt: string | null = null,
   width: number | null = null,
   height: number | null = null,
 ) {
   // Guard: only write if this crawl's session is still the active one
   if (state.sessionId !== sessionId) return;
+  // Skip images whose known dimensions fall below the threshold
+  if (minDimension > 0 && width !== null && height !== null) {
+    if (width < minDimension || height < minDimension) return;
+  }
   if (!imageUrls.has(url)) {
     imageUrls.add(url);
     state.images.push({ id: randomUUID(), url, sourcePageUrl, alt, width, height });
@@ -121,7 +126,7 @@ function addImage(
   }
 }
 
-async function crawl(sessionId: string, maxPages: number) {
+async function crawl(sessionId: string, maxPages: number, minDimension: number) {
   const visited = new Set<string>();
   const imageUrls = new Set<string>();
   const queue: string[] = [TARGET_URL];
@@ -177,7 +182,7 @@ async function crawl(sessionId: string, maxPages: number) {
           for (const src of candidates) {
             const normalized = normalizeImageUrl(src, pageUrl);
             if (normalized && isImageUrl(normalized)) {
-              addImage(normalized, pageUrl, imageUrls, sessionId, alt, w, h);
+              addImage(normalized, pageUrl, imageUrls, sessionId, minDimension, alt, w, h);
             }
           }
 
@@ -193,7 +198,7 @@ async function crawl(sessionId: string, maxPages: number) {
               if (src) {
                 const normalized = normalizeImageUrl(src, pageUrl);
                 if (normalized && isImageUrl(normalized)) {
-                  addImage(normalized, pageUrl, imageUrls, sessionId, alt, null, null);
+                  addImage(normalized, pageUrl, imageUrls, sessionId, minDimension, alt, null, null);
                 }
               }
             }
@@ -204,7 +209,7 @@ async function crawl(sessionId: string, maxPages: number) {
         $("[style]").each((_i, el) => {
           const style = $(el).attr("style") || "";
           for (const url of extractCssImageUrls(style, pageUrl)) {
-            addImage(url, pageUrl, imageUrls, sessionId, null, null, null);
+            addImage(url, pageUrl, imageUrls, sessionId, minDimension, null, null, null);
           }
         });
 
@@ -212,7 +217,7 @@ async function crawl(sessionId: string, maxPages: number) {
         $("style").each((_i, el) => {
           const css = $(el).text();
           for (const url of extractCssImageUrls(css, pageUrl)) {
-            addImage(url, pageUrl, imageUrls, sessionId, null, null, null);
+            addImage(url, pageUrl, imageUrls, sessionId, minDimension, null, null, null);
           }
         });
 
@@ -260,16 +265,20 @@ router.post("/scraper/start", (req: Request, res: Response) => {
     return;
   }
 
-  const body = req.body as { maxPages?: number } | undefined;
+  const body = req.body as { maxPages?: number; minDimension?: number } | undefined;
   const maxPages =
     typeof body?.maxPages === "number" && body.maxPages >= 0
       ? body.maxPages
       : DEFAULT_MAX_PAGES;
+  const minDimension =
+    typeof body?.minDimension === "number" && body.minDimension >= 0
+      ? body.minDimension
+      : 0;
 
   const sessionId = resetState();
   state.status = "running";
 
-  crawl(sessionId, maxPages).catch((err: unknown) => {
+  crawl(sessionId, maxPages, minDimension).catch((err: unknown) => {
     if (state.sessionId === sessionId) {
       state.status = "error";
       state.errorMessage = err instanceof Error ? err.message : String(err);
