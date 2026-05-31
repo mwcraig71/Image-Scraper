@@ -23,10 +23,12 @@ import type {
   DownloadImagesZipParams,
   ErrorResponse,
   HealthStatus,
+  LoginVerifyResult,
   ScrapeSession,
   ScrapeStatus,
   ScrapedImage,
-  StartScrapeRequest
+  StartScrapeRequest,
+  VerifyLoginRequest
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -189,6 +191,78 @@ export const useStartScrape = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getStartScrapeMutationOptions(options));
+    }
+
+export const getVerifyLoginUrl = () => {
+
+
+
+
+  return `/api/scraper/verify-login`
+}
+
+/**
+ * Makes a test request to the target site and checks whether the response indicates a logged-in session
+ * @summary Verify that provided cookies grant authenticated access
+ */
+export const verifyLogin = async (verifyLoginRequest?: VerifyLoginRequest, options?: RequestInit): Promise<LoginVerifyResult> => {
+
+  return customFetch<LoginVerifyResult>(getVerifyLoginUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      verifyLoginRequest,)
+  }
+);}
+
+
+
+
+export const getVerifyLoginMutationOptions = <TError = ErrorType<LoginVerifyResult>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyLogin>>, TError,{data?: BodyType<VerifyLoginRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof verifyLogin>>, TError,{data?: BodyType<VerifyLoginRequest>}, TContext> => {
+
+const mutationKey = ['verifyLogin'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof verifyLogin>>, {data?: BodyType<VerifyLoginRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  verifyLogin(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type VerifyLoginMutationResult = NonNullable<Awaited<ReturnType<typeof verifyLogin>>>
+    export type VerifyLoginMutationBody = BodyType<VerifyLoginRequest> | undefined
+    export type VerifyLoginMutationError = ErrorType<LoginVerifyResult>
+
+    /**
+ * @summary Verify that provided cookies grant authenticated access
+ */
+export const useVerifyLogin = <TError = ErrorType<LoginVerifyResult>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyLogin>>, TError,{data?: BodyType<VerifyLoginRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof verifyLogin>>,
+        TError,
+        {data?: BodyType<VerifyLoginRequest>},
+        TContext
+      > => {
+      return useMutation(getVerifyLoginMutationOptions(options));
     }
 
 export const getGetScrapeStatusUrl = () => {

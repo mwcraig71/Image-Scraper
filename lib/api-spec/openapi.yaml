@@ -53,6 +53,32 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /scraper/verify-login:
+    post:
+      operationId: verifyLogin
+      tags: [scraper]
+      summary: Verify that provided cookies grant authenticated access
+      description: Makes a test request to the target site and checks whether the response indicates a logged-in session
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyLoginRequest"
+      responses:
+        "200":
+          description: Login verification result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginVerifyResult"
+        "502":
+          description: Could not reach the target site
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginVerifyResult"
+
   /scraper/status:
     get:
       operationId: getScrapeStatus
@@ -248,6 +274,27 @@ components:
         - alt
         - width
         - height
+
+    VerifyLoginRequest:
+      type: object
+      properties:
+        cookies:
+          type: string
+          description: Raw Cookie header value to test
+
+    LoginVerifyResult:
+      type: object
+      properties:
+        loggedIn:
+          type: boolean
+        username:
+          type: ["string", "null"]
+        message:
+          type: string
+      required:
+        - loggedIn
+        - username
+        - message
 
     ErrorResponse:
       type: object

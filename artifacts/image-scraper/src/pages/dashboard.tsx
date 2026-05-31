@@ -3,12 +3,13 @@ import {
   useStartScrape, 
   useGetScrapeStatus, 
   useGetScrapeImages, 
-  useResetScrape, 
+  useResetScrape,
+  useVerifyLogin,
   getGetScrapeStatusQueryKey, 
   getGetScrapeImagesQueryKey 
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Play, RotateCcw, Download, Image as ImageIcon, Link as LinkIcon, AlertCircle, Activity, Box, DownloadCloud, CheckSquare, Square, SlidersHorizontal, KeyRound, ChevronDown, ChevronUp, ShieldCheck } from "lucide-react";
+import { Play, RotateCcw, Download, Image as ImageIcon, Link as LinkIcon, AlertCircle, Activity, Box, DownloadCloud, CheckSquare, Square, SlidersHorizontal, KeyRound, ChevronDown, ChevronUp, ShieldCheck, XCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,6 +25,8 @@ export default function Dashboard() {
   const [minScrapeSize, setMinScrapeSize] = useState(0);
   const [cookies, setCookies] = useState("");
   const [showCookieInput, setShowCookieInput] = useState(false);
+  const verifyLogin = useVerifyLogin();
+  const verifyResult = verifyLogin.data;
 
   // ── remote data ──────────────────────────────────────────────────────────
   const { data: statusData } = useGetScrapeStatus({
@@ -258,20 +261,50 @@ export default function Dashboard() {
                   data-testid="input-cookies"
                 />
 
-                <div className="flex items-center justify-between">
+                {/* Verify result banner */}
+                {verifyResult && (
+                  <div className={`flex items-center gap-2.5 px-3 py-2.5 rounded border text-xs font-sans ${
+                    verifyResult.loggedIn
+                      ? "bg-primary/10 border-primary/30 text-primary"
+                      : "bg-destructive/10 border-destructive/30 text-destructive"
+                  }`}>
+                    {verifyResult.loggedIn
+                      ? <ShieldCheck size={15} className="shrink-0" />
+                      : <XCircle size={15} className="shrink-0" />}
+                    <span className="flex-1">{verifyResult.message}</span>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between gap-2">
                   <p className="text-[10px] text-muted-foreground">
                     Cookies are only kept in memory and sent directly to thecandidplanet.com — never stored or logged.
                   </p>
-                  {cookies.trim() && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-xs h-7 text-destructive hover:text-destructive"
-                      onClick={() => setCookies("")}
-                    >
-                      Clear
-                    </Button>
-                  )}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {cookies.trim() && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs h-7 gap-1.5 border-primary/40 text-primary hover:border-primary"
+                        disabled={verifyLogin.isPending}
+                        onClick={() => verifyLogin.mutate({ data: { cookies: cookies.trim() } })}
+                        data-testid="button-verify-login"
+                      >
+                        {verifyLogin.isPending
+                          ? <><Loader2 size={12} className="animate-spin" /> Checking...</>
+                          : <><ShieldCheck size={12} /> Verify Login</>}
+                      </Button>
+                    )}
+                    {cookies.trim() && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs h-7 text-destructive hover:text-destructive"
+                        onClick={() => { setCookies(""); verifyLogin.reset(); }}
+                      >
+                        Clear
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

@@ -43,6 +43,21 @@ export const StartScrapeResponse = zod.object({
 
 
 /**
+ * Makes a test request to the target site and checks whether the response indicates a logged-in session
+ * @summary Verify that provided cookies grant authenticated access
+ */
+export const VerifyLoginBody = zod.object({
+  "cookies": zod.string().optional().describe('Raw Cookie header value to test')
+})
+
+export const VerifyLoginResponse = zod.object({
+  "loggedIn": zod.boolean(),
+  "username": zod.string().nullable(),
+  "message": zod.string()
+})
+
+
+/**
  * Returns current progress, visited pages, and found images
  * @summary Get current scrape status
  */

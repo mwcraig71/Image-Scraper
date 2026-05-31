@@ -259,6 +259,61 @@ async function crawl(sessionId: string, maxPages: number, minDimension: number, 
   }
 }
 
+// POST /api/scraper/verify-login — test whether provided cookies grant authenticated access
+router.post("/scraper/verify-login", async (req: Request, res: Response) => {
+  const body = req.body as { cookies?: string } | undefined;
+  const cookies = typeof body?.cookies === "string" ? body.cookies.trim() : "";
+
+  try {
+    const response = await axios.get(TARGET_URL, {
+      timeout: REQUEST_TIMEOUT,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; ImageScraper/1.0)",
+        Accept: "text/html,application/xhtml+xml",
+        ...(cookies ? { Cookie: cookies } : {}),
+      },
+      maxRedirects: 5,
+    });
+
+    const html = response.data as string;
+    const $ = cheerio.load(html);
+
+    // IPS forums show a "Sign Out" link when logged in and "Sign In" when not
+    const pageText = $.text().toLowerCase();
+    const hasSignOut =
+      $('a[href*="do=logout"], a[href*="sign-out"], a[href*="signout"]').length > 0 ||
+      pageText.includes("sign out") ||
+      pageText.includes("log out") ||
+      pageText.includes("logout");
+    const hasSignIn =
+      $('a[href*="login"], a[href*="sign-in"], a[href*="signin"]').length > 0 &&
+      !hasSignOut;
+
+    // Also try to find the username from IPS user bar
+    const username =
+      $("[data-ipsMenu-appendTo] .cUserLink").first().text().trim() ||
+      $(".ipsUserPhoto").first().attr("alt")?.trim() ||
+      $(".cUserLink").first().text().trim() ||
+      null;
+
+    const loggedIn = hasSignOut || (!hasSignIn && cookies.length > 0 && username !== null);
+
+    res.json({
+      loggedIn,
+      username: username || null,
+      message: loggedIn
+        ? `Authenticated${username ? ` as ${username}` : ""}`
+        : "Not logged in — the site returned a guest view. Check your cookie and try again.",
+    });
+  } catch (err) {
+    res.status(502).json({
+      loggedIn: false,
+      username: null,
+      message: `Could not reach ${TARGET_URL}: ${err instanceof Error ? err.message : String(err)}`,
+    });
+  }
+});
+
 // POST /api/scraper/start
 router.post("/scraper/start", (req: Request, res: Response) => {
   if (state.status === "running") {

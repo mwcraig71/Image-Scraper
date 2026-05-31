@@ -74,6 +74,18 @@ export interface ScrapedImage {
   height: number | null;
 }
 
+export interface VerifyLoginRequest {
+  /** Raw Cookie header value to test */
+  cookies?: string;
+}
+
+export interface LoginVerifyResult {
+  loggedIn: boolean;
+  /** @nullable */
+  username: string | null;
+  message: string;
+}
+
 export interface ErrorResponse {
   error: string;
 }
