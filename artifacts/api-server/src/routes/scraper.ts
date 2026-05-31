@@ -3,6 +3,7 @@ import axios from "axios";
 import * as cheerio from "cheerio";
 import archiver from "archiver";
 import { randomUUID } from "crypto";
+import { imageSize } from "image-size";
 
 const router: IRouter = Router();
 
@@ -10,6 +11,9 @@ const TARGET_URL = "https://www.thecandidplanet.com/";
 const DEFAULT_MAX_PAGES = 500;
 const CONCURRENCY = 3;
 const REQUEST_TIMEOUT = 15000;
+const IMAGE_PROBE_CONCURRENCY = 5;
+const IMAGE_PROBE_TIMEOUT = 8000;
+const IMAGE_PROBE_MAX_BYTES = 8192;
 
 interface ScrapedImage {
   id: string;
@@ -126,6 +130,60 @@ function addImage(
   }
 }
 
+/** Stream the first IMAGE_PROBE_MAX_BYTES of an image and return its pixel dimensions. */
+async function probeImageDimensions(
+  url: string,
+  cookies: string,
+): Promise<{ width: number; height: number } | null> {
+  try {
+    const response = await axios.get(url, {
+      responseType: "stream",
+      timeout: IMAGE_PROBE_TIMEOUT,
+      maxRedirects: 3,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; ImageScraper/1.0)",
+        Range: `bytes=0-${IMAGE_PROBE_MAX_BYTES - 1}`,
+        ...(cookies ? { Cookie: cookies } : {}),
+      },
+    });
+
+    return await new Promise((resolve) => {
+      const chunks: Buffer[] = [];
+      let totalBytes = 0;
+      let settled = false;
+
+      const settle = () => {
+        if (settled) return;
+        settled = true;
+        try {
+          const buf = Buffer.concat(chunks);
+          const dims = imageSize(buf);
+          resolve(dims.width && dims.height ? { width: dims.width, height: dims.height } : null);
+        } catch {
+          resolve(null);
+        }
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      response.data.on("data", (chunk: any) => {
+        const buf = Buffer.from(chunk);
+        chunks.push(buf);
+        totalBytes += buf.length;
+        if (totalBytes >= IMAGE_PROBE_MAX_BYTES) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (response.data as any).destroy();
+          settle();
+        }
+      });
+      response.data.on("end", settle);
+      response.data.on("close", settle);
+      response.data.on("error", () => { settled = true; resolve(null); });
+    });
+  } catch {
+    return null;
+  }
+}
+
 async function crawl(sessionId: string, maxPages: number, minDimension: number, cookies: string) {
   const visited = new Set<string>();
   const imageUrls = new Set<string>();
@@ -167,6 +225,14 @@ async function crawl(sessionId: string, maxPages: number, minDimension: number, 
         const html = response.data as string;
         const $ = cheerio.load(html);
 
+        // Candidates whose real dimensions need probing (no HTML width/height)
+        type ProbePending = { url: string; alt: string | null };
+        const probePending: ProbePending[] = [];
+
+        const queueUnknown = (url: string, alt: string | null) => {
+          if (!imageUrls.has(url)) probePending.push({ url, alt });
+        };
+
         // ── <img> tags ──────────────────────────────────────────────────────
         $("img").each((_i, el) => {
           const alt = $(el).attr("alt") || null;
@@ -183,7 +249,11 @@ async function crawl(sessionId: string, maxPages: number, minDimension: number, 
           for (const src of candidates) {
             const normalized = normalizeImageUrl(src, pageUrl);
             if (normalized && isImageUrl(normalized)) {
-              addImage(normalized, pageUrl, imageUrls, sessionId, minDimension, alt, w, h);
+              if (w && h) {
+                addImage(normalized, pageUrl, imageUrls, sessionId, minDimension, alt, w, h);
+              } else {
+                queueUnknown(normalized, alt);
+              }
             }
           }
 
@@ -199,7 +269,7 @@ async function crawl(sessionId: string, maxPages: number, minDimension: number, 
               if (src) {
                 const normalized = normalizeImageUrl(src, pageUrl);
                 if (normalized && isImageUrl(normalized)) {
-                  addImage(normalized, pageUrl, imageUrls, sessionId, minDimension, alt, null, null);
+                  queueUnknown(normalized, alt);
                 }
               }
             }
@@ -210,7 +280,7 @@ async function crawl(sessionId: string, maxPages: number, minDimension: number, 
         $("[style]").each((_i, el) => {
           const style = $(el).attr("style") || "";
           for (const url of extractCssImageUrls(style, pageUrl)) {
-            addImage(url, pageUrl, imageUrls, sessionId, minDimension, null, null, null);
+            queueUnknown(url, null);
           }
         });
 
@@ -218,9 +288,32 @@ async function crawl(sessionId: string, maxPages: number, minDimension: number, 
         $("style").each((_i, el) => {
           const css = $(el).text();
           for (const url of extractCssImageUrls(css, pageUrl)) {
-            addImage(url, pageUrl, imageUrls, sessionId, minDimension, null, null, null);
+            queueUnknown(url, null);
           }
         });
+
+        // ── Probe unknown-dimension candidates ──────────────────────────────
+        // Process in batches to avoid flooding the target server
+        for (let i = 0; i < probePending.length; i += IMAGE_PROBE_CONCURRENCY) {
+          if (state.sessionId !== sessionId) break;
+          const batch = probePending.slice(i, i + IMAGE_PROBE_CONCURRENCY);
+          await Promise.all(
+            batch.map(async ({ url, alt }) => {
+              if (state.sessionId !== sessionId) return;
+              if (minDimension > 0) {
+                // Must verify actual size — probe the image header bytes
+                const dims = await probeImageDimensions(url, cookies);
+                if (dims) {
+                  addImage(url, pageUrl, imageUrls, sessionId, minDimension, alt, dims.width, dims.height);
+                }
+                // dims === null → can't determine size → skip (conservative)
+              } else {
+                // No size filter — add without probing
+                addImage(url, pageUrl, imageUrls, sessionId, 0, alt, null, null);
+              }
+            }),
+          );
+        }
 
         // ── Internal links for further crawling ─────────────────────────────
         const newLinks: string[] = [];

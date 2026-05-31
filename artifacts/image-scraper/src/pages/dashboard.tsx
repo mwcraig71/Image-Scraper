@@ -131,8 +131,8 @@ export default function Dashboard() {
       if (img.width !== null && img.height !== null) {
         return img.width >= minSize && img.height >= minSize;
       }
-      // unknown dimensions: always show
-      return true;
+      // unknown dimensions: hide when a filter is active (can't verify size)
+      return false;
     });
   }, [imagesData, minSize]);
 
