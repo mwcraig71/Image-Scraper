@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: scraper
+    description: Image scraping operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,71 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /scraper/start:
+    post:
+      operationId: startScrape
+      tags: [scraper]
+      summary: Start a scraping session
+      description: Begins crawling the target site and returns a session ID
+      responses:
+        "200":
+          description: Scrape session started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScrapeSession"
+        "409":
+          description: A scrape is already in progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /scraper/status:
+    get:
+      operationId: getScrapeStatus
+      tags: [scraper]
+      summary: Get current scrape status
+      description: Returns current progress, visited pages, and found images
+      responses:
+        "200":
+          description: Current scrape status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScrapeStatus"
+
+  /scraper/images:
+    get:
+      operationId: getScrapeImages
+      tags: [scraper]
+      summary: Get all discovered images
+      description: Returns the full list of images found so far
+      responses:
+        "200":
+          description: List of discovered images
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ScrapedImage"
+
+  /scraper/reset:
+    post:
+      operationId: resetScrape
+      tags: [scraper]
+      summary: Reset scraper state
+      description: Clears all scrape results and resets to idle state
+      responses:
+        "200":
+          description: Reset successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScrapeSession"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +101,74 @@ components:
       required:
         - status
 
+    ScrapeSession:
+      type: object
+      properties:
+        sessionId:
+          type: string
+        status:
+          type: string
+          enum: [idle, running, done, error]
+        message:
+          type: string
+      required:
+        - sessionId
+        - status
+
+    ScrapeStatus:
+      type: object
+      properties:
+        sessionId:
+          type: string
+        status:
+          type: string
+          enum: [idle, running, done, error]
+        pagesVisited:
+          type: integer
+        pagesQueued:
+          type: integer
+        imagesFound:
+          type: integer
+        currentUrl:
+          type: ["string", "null"]
+        errorMessage:
+          type: ["string", "null"]
+      required:
+        - sessionId
+        - status
+        - pagesVisited
+        - pagesQueued
+        - imagesFound
+        - currentUrl
+        - errorMessage
+
+    ScrapedImage:
+      type: object
+      properties:
+        id:
+          type: string
+        url:
+          type: string
+        sourcePageUrl:
+          type: string
+        alt:
+          type: ["string", "null"]
+        width:
+          type: ["integer", "null"]
+        height:
+          type: ["integer", "null"]
+      required:
+        - id
+        - url
+        - sourcePageUrl
+        - alt
+        - width
+        - height
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
