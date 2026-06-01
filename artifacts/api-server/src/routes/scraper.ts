@@ -13,6 +13,15 @@ const REQUEST_TIMEOUT = 15000;
 const IMAGE_PROBE_CONCURRENCY = 5;
 const IMAGE_PROBE_TIMEOUT = 8000;
 const IMAGE_PROBE_MAX_BYTES = 8192;
+const FETCH_MAX_RETRIES = 2;
+const RETRY_DELAY_MS = 1500;
+
+// User-agent pool — rotate on 403
+const USER_AGENTS = [
+  "Mozilla/5.0 (compatible; ImageScraper/1.0)",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
+];
 
 interface ScrapedImage {
   id: string;
@@ -138,6 +147,53 @@ function addVideo(
   }
 }
 
+/** Fetch a page with automatic retry + UA rotation on 403/429/5xx. */
+async function fetchPageWithFallback(
+  pageUrl: string,
+  cookies: string,
+): Promise<{ data: string; finalUrl: string }> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= FETCH_MAX_RETRIES; attempt++) {
+    const ua = USER_AGENTS[attempt % USER_AGENTS.length];
+    try {
+      const resp = await axios.get<string>(pageUrl, {
+        timeout: REQUEST_TIMEOUT,
+        headers: {
+          "User-Agent": ua,
+          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9",
+          Referer: new URL(pageUrl).origin + "/",
+          ...(cookies ? { Cookie: cookies } : {}),
+        },
+        maxRedirects: 5,
+      });
+      return { data: resp.data, finalUrl: pageUrl };
+    } catch (err) {
+      lastError = err;
+      const status = (err as { response?: { status?: number } }).response?.status;
+      // 429 Too Many Requests — wait before next attempt
+      if (status === 429 && attempt < FETCH_MAX_RETRIES) {
+        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * (attempt + 2)));
+        continue;
+      }
+      // 403 — rotate UA on next attempt
+      if (status === 403 && attempt < FETCH_MAX_RETRIES) continue;
+      // 5xx — brief delay then retry
+      if (status && status >= 500 && attempt < FETCH_MAX_RETRIES) {
+        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+        continue;
+      }
+      // Network error — retry once
+      if (!status && attempt < FETCH_MAX_RETRIES) {
+        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+        continue;
+      }
+      break;
+    }
+  }
+  throw lastError;
+}
+
 function extractCssImageUrls(css: string, base: string): string[] {
   const urls: string[] = [];
   const regex = /url\(\s*(['"]?)([^'")\s]+)\1\s*\)/gi;
@@ -257,21 +313,12 @@ async function crawl(sessionId: string, targetUrl: string, maxPages: number, min
 
         state.currentUrl = pageUrl;
 
-        const response = await axios.get(pageUrl, {
-          timeout: REQUEST_TIMEOUT,
-          headers: {
-            "User-Agent": "Mozilla/5.0 (compatible; ImageScraper/1.0)",
-            Accept: "text/html,application/xhtml+xml",
-            ...(cookies ? { Cookie: cookies } : {}),
-          },
-          maxRedirects: 5,
-        });
+        const { data: html } = await fetchPageWithFallback(pageUrl, cookies);
 
         // Re-check after async fetch
         if (state.sessionId !== sessionId) return [];
 
         state.pagesVisited += 1;
-        const html = response.data as string;
         const $ = cheerio.load(html);
 
         // Candidates whose real dimensions need probing (no HTML width/height)
@@ -339,6 +386,93 @@ async function crawl(sessionId: string, targetUrl: string, maxPages: number, min
           for (const url of extractCssImageUrls(css, pageUrl)) {
             queueUnknown(url, null);
           }
+        });
+
+        // ── <img> extra lazy-load data-* attributes ─────────────────────────
+        $("img, [data-bg], [data-background], [data-image], [data-full], [data-zoom-image], [data-large], [data-full-size], [data-src-full], [data-poster]").each((_i, el) => {
+          const extras = [
+            $(el).attr("data-bg"),
+            $(el).attr("data-background"),
+            $(el).attr("data-image"),
+            $(el).attr("data-full"),
+            $(el).attr("data-zoom-image"),
+            $(el).attr("data-large"),
+            $(el).attr("data-full-size"),
+            $(el).attr("data-src-full"),
+            $(el).attr("data-poster"),
+          ].filter(Boolean) as string[];
+          for (const src of extras) {
+            const normalized = normalizeImageUrl(src, pageUrl);
+            if (normalized && isImageUrl(normalized)) queueUnknown(normalized, null);
+          }
+        });
+
+        // ── <picture> / <source srcset> ──────────────────────────────────────
+        $("picture source[srcset], source[srcset]").each((_i, el) => {
+          const srcset = $(el).attr("srcset") || "";
+          for (const part of srcset.split(",")) {
+            const src = part.trim().split(/\s+/)[0];
+            if (src) {
+              const normalized = normalizeImageUrl(src, pageUrl);
+              if (normalized && isImageUrl(normalized)) queueUnknown(normalized, null);
+            }
+          }
+        });
+
+        // ── Open Graph / Twitter Card meta images ────────────────────────────
+        const metaSelectors = [
+          'meta[property="og:image"]',
+          'meta[property="og:image:secure_url"]',
+          'meta[name="twitter:image"]',
+          'meta[name="twitter:image:src"]',
+        ];
+        for (const sel of metaSelectors) {
+          const content = $(sel).attr("content");
+          if (content) {
+            const normalized = normalizeImageUrl(content, pageUrl);
+            if (normalized && isImageUrl(normalized)) queueUnknown(normalized, "og/meta image");
+          }
+        }
+
+        // ── JSON-LD structured data ──────────────────────────────────────────
+        $('script[type="application/ld+json"]').each((_i, el) => {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const extractImages = (obj: any) => {
+              if (!obj || typeof obj !== "object") return;
+              for (const key of ["image", "thumbnail", "thumbnailUrl", "contentUrl"]) {
+                const val = obj[key];
+                if (typeof val === "string") {
+                  const n = normalizeImageUrl(val, pageUrl);
+                  if (n && isImageUrl(n)) queueUnknown(n, "json-ld");
+                } else if (Array.isArray(val)) {
+                  for (const item of val) {
+                    if (typeof item === "string") {
+                      const n = normalizeImageUrl(item, pageUrl);
+                      if (n && isImageUrl(n)) queueUnknown(n, "json-ld");
+                    } else if (item && typeof item === "object") {
+                      const u = item.url || item.contentUrl;
+                      if (typeof u === "string") {
+                        const n = normalizeImageUrl(u, pageUrl);
+                        if (n && isImageUrl(n)) queueUnknown(n, "json-ld");
+                      }
+                    }
+                  }
+                } else if (val && typeof val === "object") {
+                  const u = val.url || val.contentUrl;
+                  if (typeof u === "string") {
+                    const n = normalizeImageUrl(u, pageUrl);
+                    if (n && isImageUrl(n)) queueUnknown(n, "json-ld");
+                  }
+                }
+              }
+              // Recurse into nested objects / arrays
+              for (const v of Object.values(obj)) {
+                if (v && typeof v === "object") extractImages(v);
+              }
+            };
+            extractImages(JSON.parse($(el).text()));
+          } catch { /* malformed JSON — skip */ }
         });
 
         // ── <video> tags and <a> links to video files ───────────────────────
