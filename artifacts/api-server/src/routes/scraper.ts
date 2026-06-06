@@ -119,7 +119,9 @@ function isImageUrl(url: string): boolean {
 function isVideoUrl(url: string): boolean {
   try {
     const pathname = new URL(url).pathname.toLowerCase();
-    return /\.(mp4|webm|mov|avi|mkv|m4v|ogv|wmv|flv|m2ts|ts)(\?|$)/i.test(pathname);
+    // Allow extension followed by /, ? or end-of-string to catch file-host URLs
+    // like mediafire.com/…/video.mp4/file where the extension is a path segment.
+    return /\.(mp4|webm|mov|avi|mkv|m4v|ogv|wmv|flv|m2ts|ts)(\?|\/|$)/i.test(pathname);
   } catch {
     return false;
   }
