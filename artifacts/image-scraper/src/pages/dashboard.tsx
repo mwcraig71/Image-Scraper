@@ -12,7 +12,7 @@ import {
   getGetScrapeVideosQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Play, Square as StopIcon, RotateCcw, Download, Image as ImageIcon, Link as LinkIcon, AlertCircle, Activity, Box, DownloadCloud, CheckSquare, Square, SlidersHorizontal, KeyRound, ChevronDown, ChevronUp, ShieldCheck, XCircle, Loader2, Copy, Check, Film, ExternalLink } from "lucide-react";
+import { Play, Square as StopIcon, RotateCcw, Download, Image as ImageIcon, Link as LinkIcon, AlertCircle, Activity, Box, DownloadCloud, CheckSquare, Square, SlidersHorizontal, KeyRound, ChevronDown, ChevronUp, ShieldCheck, XCircle, Loader2, Copy, Check, Film, ExternalLink, Bookmark } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Card, CardContent } from "@/components/ui/card";
@@ -331,26 +331,38 @@ export default function Dashboard() {
                 <div className="flex flex-col gap-2.5 bg-primary/5 border border-primary/20 rounded p-3 text-xs">
                   <p className="font-semibold text-foreground">Option 1 — Bookmark capture (easiest, one-time setup)</p>
                   <ol className="text-muted-foreground flex flex-col gap-1.5 pl-1 leading-relaxed list-decimal list-inside">
-                    <li>Click <strong className="text-foreground">Copy Code</strong> below.</li>
-                    <li>Right-click your browser's bookmarks bar → <strong className="text-foreground">Add page…</strong> (or "Add bookmark").</li>
-                    <li>Set the <strong className="text-foreground">Name</strong> to anything (e.g. <em>Capture Cookies</em>).</li>
-                    <li>Paste the copied code into the <strong className="text-foreground">URL</strong> field → Save.</li>
-                    <li>Go to the target site, log in, click your new bookmark → this app opens with cookies pre-filled.</li>
+                    <li>Show your bookmarks bar if hidden (<kbd className="bg-muted px-1 py-0.5 rounded text-[10px]">Ctrl/Cmd+Shift+B</kbd>).</li>
+                    <li><strong className="text-foreground">Drag</strong> the blue button below up onto your bookmarks bar.</li>
+                    <li>Go to the target site and log in.</li>
+                    <li>Click the bookmark you just added → this app reopens with cookies pre-filled.</li>
                   </ol>
-                  <div className="flex items-center gap-2 pt-0.5">
+                  <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                    {/* Draggable bookmarklet — href is set via ref to bypass React's javascript: block.
+                        Clicking does nothing useful (it'd run on THIS page), so it's drag-only. */}
+                    <a
+                      ref={bookmarkletRef}
+                      draggable
+                      onClick={(e) => e.preventDefault()}
+                      title="Drag me to your bookmarks bar"
+                      className="inline-flex items-center gap-1.5 h-7 px-3 rounded border border-primary/50 bg-primary/15 text-primary font-medium cursor-grab active:cursor-grabbing select-none no-underline"
+                    >
+                      <Bookmark size={12} /> Capture Cookies
+                    </a>
+                    <span className="text-muted-foreground">← drag me to your bookmarks bar</span>
+                  </div>
+                  <div className="flex items-center gap-2 pt-0.5 border-t border-primary/10 mt-0.5">
+                    <span className="text-muted-foreground pt-1.5">Can't drag?</span>
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-7 text-xs gap-1.5 border-primary/40 text-primary hover:border-primary"
+                      className="h-7 text-xs gap-1.5 border-primary/40 text-primary hover:border-primary mt-1"
                       onClick={copyBookmarklet}
                     >
                       {bookmarkletCopied
                         ? <><Check size={12} /> Copied!</>
                         : <><Copy size={12} /> Copy Code</>}
                     </Button>
-                    {/* hidden anchor kept so the href is set — not shown to user */}
-                    <a ref={bookmarkletRef} className="hidden" aria-hidden="true" />
-                    <span className="text-muted-foreground">then paste as a bookmark URL</span>
+                    <span className="text-muted-foreground pt-1.5">then paste as a new bookmark's URL.</span>
                   </div>
                 </div>
 
