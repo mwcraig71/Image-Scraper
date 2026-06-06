@@ -26,7 +26,7 @@ export default function Dashboard() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [maxPages, setMaxPages] = useState(500);
   const [minScrapeSize, setMinScrapeSize] = useState(0);
-  const [targetUrl, setTargetUrl] = useState("https://www.thecandidplanet.com/");
+  const [targetUrl, setTargetUrl] = useState("");
   const [cookies, setCookies] = useState("");
   const [showCookieInput, setShowCookieInput] = useState(false);
   const verifyLogin = useVerifyLogin();
