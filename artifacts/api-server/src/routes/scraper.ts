@@ -116,12 +116,17 @@ function isImageUrl(url: string): boolean {
   }
 }
 
+const VIDEO_EXT_RE = /\.(mp4|webm|mov|avi|mkv|m4v|ogv|wmv|flv|m2ts|ts)(\?|\/|$)/i;
+
 function isVideoUrl(url: string): boolean {
   try {
-    const pathname = new URL(url).pathname.toLowerCase();
-    // Allow extension followed by /, ? or end-of-string to catch file-host URLs
-    // like mediafire.com/…/video.mp4/file where the extension is a path segment.
-    return /\.(mp4|webm|mov|avi|mkv|m4v|ogv|wmv|flv|m2ts|ts)(\?|\/|$)/i.test(pathname);
+    const u = new URL(url);
+    // 1. Check pathname — covers direct URLs and file-host paths like .mp4/file
+    if (VIDEO_EXT_RE.test(u.pathname.toLowerCase())) return true;
+    // 2. Check the full decoded URL — catches redirect/tracker wrappers where the
+    //    real video URL is embedded in a query param (e.g. ?url=https://…video.mp4/file)
+    const decoded = decodeURIComponent(url).toLowerCase();
+    return VIDEO_EXT_RE.test(decoded);
   } catch {
     return false;
   }
@@ -498,7 +503,36 @@ async function crawl(sessionId: string, targetUrl: string, maxPages: number, min
               }
             } catch { /* skip malformed */ }
           }
+
+          // Also scan visible link text — catches cases where the href is a
+          // redirect/tracker but the link text shows the real video URL.
+          const text = $(el).text().trim();
+          if (text.startsWith("http")) {
+            try {
+              const textUrl = new URL(text).toString();
+              if (isVideoUrl(textUrl)) {
+                addVideo(textUrl, pageUrl, videoUrls, sessionId);
+              }
+            } catch { /* not a valid URL */ }
+          }
         });
+
+        // Also scan raw page text for bare video URLs not wrapped in <a> tags.
+        // Covers plain-text pastes inside spoiler/hidden-content boxes on forums.
+        {
+          const rawText = $("body").text();
+          const urlPattern = /https?:\/\/[^\s<>"')\]]+/gi;
+          let m: RegExpExecArray | null;
+          while ((m = urlPattern.exec(rawText)) !== null) {
+            const candidate = m[0].replace(/[.,;:!?)>\]'"]+$/, ""); // strip trailing punctuation
+            if (!candidate.includes(".") ) continue;
+            if (isVideoUrl(candidate)) {
+              try {
+                addVideo(new URL(candidate).toString(), pageUrl, videoUrls, sessionId);
+              } catch { /* skip */ }
+            }
+          }
+        }
 
         // ── Probe unknown-dimension candidates ──────────────────────────────
         // Process in batches to avoid flooding the target server
