@@ -704,7 +704,7 @@ export default function Dashboard() {
         {/* Videos Section */}
         {((videosData?.length ?? 0) > 0 || isRunning) && (
           <section className="bg-card border border-border rounded-lg p-5 flex flex-col gap-4 shadow-xl shadow-black/50">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <Film size={16} className="text-primary" />
               <h2 className="text-sm font-semibold text-foreground uppercase tracking-widest">
                 Discovered Videos
@@ -712,6 +712,24 @@ export default function Dashboard() {
               <span className="text-xs text-muted-foreground font-normal ml-1">
                 {videosData?.length ?? 0} total
               </span>
+              {(videosData?.length ?? 0) > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs gap-1.5 ml-auto"
+                  onClick={() => {
+                    const lines = videosData!.map((v) => v.url).join("\n");
+                    const blob = new Blob([lines], { type: "text/plain" });
+                    const a = document.createElement("a");
+                    a.href = URL.createObjectURL(blob);
+                    a.download = "video-links.txt";
+                    a.click();
+                    URL.revokeObjectURL(a.href);
+                  }}
+                >
+                  <Download size={12} /> Download All Links (.txt)
+                </Button>
+              )}
             </div>
 
             {(videosData?.length ?? 0) === 0 && isRunning && (
