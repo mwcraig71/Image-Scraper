@@ -118,15 +118,26 @@ function isImageUrl(url: string): boolean {
 
 const VIDEO_EXT_RE = /\.(mp4|webm|mov|avi|mkv|m4v|ogv|wmv|flv|m2ts|ts)(\?|\/|$)/i;
 
+// Hosting services that use opaque IDs — no file extension appears in the URL.
+const VIDEO_HOST_PATTERNS: RegExp[] = [
+  /\bdrive\.google\.com\/file\/d\/[^/?]+/,          // Google Drive file viewer
+  /\bdrive\.google\.com\/(open|uc)\?/,              // Google Drive open / direct download
+  /\bdropbox\.com\/s\/[^?]+\.(mp4|mov|avi|mkv|webm|m4v)/i, // Dropbox video share
+  /\bmega\.(?:nz|co\.nz|io)\/(file|#)/,             // Mega.nz file link
+  /\bone\.drive\.live\.com\//,                       // OneDrive
+  /\bonedrive\.live\.com\//,                         // OneDrive (alt domain)
+];
+
 function isVideoUrl(url: string): boolean {
   try {
     const u = new URL(url);
-    // 1. Check pathname — covers direct URLs and file-host paths like .mp4/file
+    // 1. Extension in pathname — direct URLs and file-host paths like .mp4/file
     if (VIDEO_EXT_RE.test(u.pathname.toLowerCase())) return true;
-    // 2. Check the full decoded URL — catches redirect/tracker wrappers where the
-    //    real video URL is embedded in a query param (e.g. ?url=https://…video.mp4/file)
+    // 2. Full decoded URL — catches redirect wrappers where the video URL is a query param
     const decoded = decodeURIComponent(url).toLowerCase();
-    return VIDEO_EXT_RE.test(decoded);
+    if (VIDEO_EXT_RE.test(decoded)) return true;
+    // 3. Known video-hosting domains that use opaque IDs (no extension in URL)
+    return VIDEO_HOST_PATTERNS.some((re) => re.test(url));
   } catch {
     return false;
   }
@@ -134,7 +145,17 @@ function isVideoUrl(url: string): boolean {
 
 function videoFilename(url: string): string {
   try {
-    return decodeURIComponent(new URL(url).pathname.split("/").pop() || url);
+    // Google Drive: /file/d/{ID}/view → gdrive-{ID}.mp4
+    const gd = url.match(/drive\.google\.com\/file\/d\/([^/?]+)/);
+    if (gd) return `gdrive-${gd[1]}.mp4`;
+    // Mega.nz: use the hash fragment ID
+    const mega = url.match(/mega\.[^/]+\/(file|#)!?([A-Za-z0-9_-]+)/);
+    if (mega) return `mega-${mega[2]}.mp4`;
+    // OneDrive: use last path segment
+    const od = url.match(/one?drive\.live\.com\/.*\/([^/?]+)/i);
+    if (od) return `onedrive-${od[1]}.mp4`;
+    // Default: last path segment, decoded
+    return decodeURIComponent(new URL(url).pathname.split("/").filter(Boolean).pop() || url);
   } catch {
     return url;
   }
