@@ -174,6 +174,7 @@ function addVideo(
     videoUrls.add(url);
     state.videos.push({ id: randomUUID(), url, sourcePageUrl, filename: videoFilename(url) });
     state.videosFound += 1;
+    console.log(`[SCRAPER] VIDEO FOUND: ${url} | source: ${sourcePageUrl}`);
   }
 }
 
@@ -355,6 +356,10 @@ async function crawl(sessionId: string, targetUrl: string, maxPages: number, min
 
         state.currentUrl = pageUrl;
 
+        // Log cookie count for this domain before fetching
+        const jarCookies = jar.getCookiesSync(pageUrl);
+        console.log(`[SCRAPER] Fetching (${state.pagesVisited + 1}) | cookies in jar: ${jarCookies.length} | ${pageUrl}`);
+
         const { data: html } = await fetchPageWithFallback(pageUrl, axiosInstance);
 
         // Re-check after async fetch
@@ -362,6 +367,15 @@ async function crawl(sessionId: string, targetUrl: string, maxPages: number, min
 
         state.pagesVisited += 1;
         const $ = cheerio.load(html);
+
+        // Auth diagnostic: check whether the page looks like a logged-in or guest response
+        const htmlLower = html.toLowerCase();
+        const looksAuthed =
+          !htmlLower.includes('data-action="sign_in"') &&
+          !htmlLower.includes('href="#elSignIn"') &&
+          (htmlLower.includes('data-ipsquicksearch') || htmlLower.includes('ips4_member_id') ||
+           jarCookies.some(c => c.key === 'ips4_member_id' || c.key === 'ips4_IPSSessionFront'));
+        console.log(`[SCRAPER] Auth signal: ${looksAuthed ? "MEMBER ✓" : "GUEST ✗"} | jar: ${jarCookies.map(c => c.key).join(", ") || "(empty)"}`);
 
         // Candidates whose real dimensions need probing (no HTML width/height)
         type ProbePending = { url: string; alt: string | null };
