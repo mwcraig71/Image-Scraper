@@ -1,5 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import axios from "axios";
+import axios, { type AxiosInstance } from "axios";
+import { wrapper as axiosCookieJarSupport } from "axios-cookiejar-support";
+import { CookieJar } from "tough-cookie";
 import * as cheerio from "cheerio";
 import archiver from "archiver";
 import { randomUUID } from "crypto";
@@ -175,23 +177,24 @@ function addVideo(
   }
 }
 
-/** Fetch a page with automatic retry + UA rotation on 403/429/5xx. */
+/** Fetch a page with automatic retry + UA rotation on 403/429/5xx.
+ *  Pass a cookie-jar-wrapped AxiosInstance so Set-Cookie headers are absorbed
+ *  automatically across all pages in the same crawl session. */
 async function fetchPageWithFallback(
   pageUrl: string,
-  cookies: string,
+  axiosInstance: AxiosInstance,
 ): Promise<{ data: string; finalUrl: string }> {
   let lastError: unknown;
   for (let attempt = 0; attempt <= FETCH_MAX_RETRIES; attempt++) {
     const ua = USER_AGENTS[attempt % USER_AGENTS.length];
     try {
-      const resp = await axios.get<string>(pageUrl, {
+      const resp = await axiosInstance.get<string>(pageUrl, {
         timeout: REQUEST_TIMEOUT,
         headers: {
           "User-Agent": ua,
           Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
           "Accept-Language": "en-US,en;q=0.9",
           Referer: new URL(pageUrl).origin + "/",
-          ...(cookies ? { Cookie: cookies } : {}),
         },
         maxRedirects: 5,
       });
@@ -265,17 +268,16 @@ function addImage(
 /** Stream the first IMAGE_PROBE_MAX_BYTES of an image and return its pixel dimensions. */
 async function probeImageDimensions(
   url: string,
-  cookies: string,
+  axiosInstance: AxiosInstance,
 ): Promise<{ width: number; height: number } | null> {
   try {
-    const response = await axios.get(url, {
+    const response = await axiosInstance.get(url, {
       responseType: "stream",
       timeout: IMAGE_PROBE_TIMEOUT,
       maxRedirects: 3,
       headers: {
         "User-Agent": "Mozilla/5.0 (compatible; ImageScraper/1.0)",
         Range: `bytes=0-${IMAGE_PROBE_MAX_BYTES - 1}`,
-        ...(cookies ? { Cookie: cookies } : {}),
       },
     });
 
@@ -317,6 +319,18 @@ async function probeImageDimensions(
 }
 
 async function crawl(sessionId: string, targetUrl: string, maxPages: number, minDimension: number, cookies: string) {
+  // ── Cookie jar — absorbs Set-Cookie headers so the session stays alive ──
+  const jar = new CookieJar();
+  if (cookies) {
+    // Seed the jar with the user-provided Cookie header (name=value pairs)
+    const origin = new URL(targetUrl).origin + "/";
+    for (const pair of cookies.split(";").map((s) => s.trim()).filter(Boolean)) {
+      try { jar.setCookieSync(pair, origin); } catch { /* skip malformed */ }
+    }
+  }
+  // Wrap a fresh axios instance so every request/response goes through the jar
+  const axiosInstance: AxiosInstance = axiosCookieJarSupport(axios.create({ jar }));
+
   const visited = new Set<string>();
   const imageUrls = new Set<string>();
   const videoUrls = new Set<string>();
@@ -341,7 +355,7 @@ async function crawl(sessionId: string, targetUrl: string, maxPages: number, min
 
         state.currentUrl = pageUrl;
 
-        const { data: html } = await fetchPageWithFallback(pageUrl, cookies);
+        const { data: html } = await fetchPageWithFallback(pageUrl, axiosInstance);
 
         // Re-check after async fetch
         if (state.sessionId !== sessionId) return [];
@@ -565,7 +579,7 @@ async function crawl(sessionId: string, targetUrl: string, maxPages: number, min
               if (state.sessionId !== sessionId) return;
               if (minDimension > 0) {
                 // Must verify actual size — probe the image header bytes
-                const dims = await probeImageDimensions(url, cookies);
+                const dims = await probeImageDimensions(url, axiosInstance);
                 if (dims) {
                   addImage(url, pageUrl, imageUrls, sessionId, minDimension, alt, dims.width, dims.height);
                 }

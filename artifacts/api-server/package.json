@@ -14,6 +14,7 @@
     "@workspace/db": "workspace:*",
     "archiver": "^6.0.2",
     "axios": "^1.16.1",
+    "axios-cookiejar-support": "^7.0.0",
     "cheerio": "^1.2.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
@@ -21,7 +22,8 @@
     "express": "^5.2.1",
     "image-size": "^2.0.2",
     "pino": "^9.14.0",
-    "pino-http": "^10.5.0"
+    "pino-http": "^10.5.0",
+    "tough-cookie": "^6.0.1"
   },
   "devDependencies": {
     "@types/archiver": "^7.0.0",
@@ -30,6 +32,7 @@
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "catalog:",
+    "@types/tough-cookie": "^4.0.5",
     "esbuild": "0.27.3",
     "esbuild-plugin-pino": "^2.3.3",
     "pino-pretty": "^13.1.3",
