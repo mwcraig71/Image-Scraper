@@ -580,6 +580,24 @@ export default function Dashboard() {
                     {selectedCount} selected
                   </span>
                 )}
+
+                {/* Download all image URLs as plain text */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs gap-1.5"
+                  onClick={() => {
+                    const lines = filteredImages.map((img) => img.url).join("\n");
+                    const blob = new Blob([lines], { type: "text/plain" });
+                    const a = document.createElement("a");
+                    a.href = URL.createObjectURL(blob);
+                    a.download = "image-links.txt";
+                    a.click();
+                    URL.revokeObjectURL(a.href);
+                  }}
+                >
+                  <Download size={12} /> Download Links (.txt)
+                </Button>
               </div>
             )}
           </div>
