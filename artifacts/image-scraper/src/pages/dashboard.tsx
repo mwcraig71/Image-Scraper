@@ -12,7 +12,7 @@ import {
   getGetScrapeVideosQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Play, Square as StopIcon, RotateCcw, Download, Image as ImageIcon, Link as LinkIcon, AlertCircle, Activity, Box, DownloadCloud, CheckSquare, Square, SlidersHorizontal, KeyRound, ChevronDown, ChevronUp, ShieldCheck, XCircle, Loader2, Copy, Check, Film, ExternalLink, Bookmark } from "lucide-react";
+import { Play, Square as StopIcon, RotateCcw, Download, Image as ImageIcon, Link as LinkIcon, AlertCircle, Activity, Box, DownloadCloud, CheckSquare, Square, SlidersHorizontal, KeyRound, ChevronDown, ChevronUp, ShieldCheck, XCircle, Loader2, Copy, Check, Film, ExternalLink, Bookmark, Maximize2, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Card, CardContent } from "@/components/ui/card";
@@ -158,6 +158,30 @@ export default function Dashboard() {
       return false;
     });
   }, [imagesData, minSize]);
+
+  // ── lightbox ──────────────────────────────────────────────────────────────
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const lightboxImg = lightboxIndex !== null ? filteredImages[lightboxIndex] : null;
+  const lightboxVideos = lightboxImg
+    ? (videosData ?? []).filter((v) => v.sourcePageUrl === lightboxImg.sourcePageUrl)
+    : [];
+
+  const closeLightbox = useCallback(() => setLightboxIndex(null), []);
+  const lightboxPrev = useCallback(() =>
+    setLightboxIndex((i) => (i !== null && i > 0 ? i - 1 : i)), []);
+  const lightboxNext = useCallback(() =>
+    setLightboxIndex((i) => (i !== null && i < filteredImages.length - 1 ? i + 1 : i)), [filteredImages.length]);
+
+  useEffect(() => {
+    if (lightboxIndex === null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeLightbox();
+      if (e.key === "ArrowLeft") lightboxPrev();
+      if (e.key === "ArrowRight") lightboxNext();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lightboxIndex, closeLightbox, lightboxPrev, lightboxNext]);
 
   // ── selection helpers ────────────────────────────────────────────────────
   const toggleSelect = useCallback((id: string) => {
@@ -608,15 +632,20 @@ export default function Dashboard() {
                       <img 
                         src={`/api/scraper/images/${img.id}/download`}
                         alt={img.alt || "Scraped image"} 
-                        className="max-w-full max-h-full object-contain relative z-10 drop-shadow-md pointer-events-none"
+                        className="max-w-full max-h-full object-contain relative z-10 drop-shadow-md cursor-zoom-in"
                         loading="lazy"
+                        onClick={(e) => { e.stopPropagation(); setLightboxIndex(i); }}
                       />
 
-                      {/* Hover overlay — download button */}
+                      {/* Hover overlay — view + download buttons */}
                       <div
                         className="absolute inset-0 bg-background/80 opacity-0 group-hover:opacity-100 transition-opacity z-20 flex items-center justify-center gap-2 backdrop-blur-sm"
                         onClick={(e) => e.stopPropagation()}
                       >
+                        <Button variant="secondary" size="sm" className="gap-1.5 font-sans font-bold shadow-xl"
+                          onClick={() => setLightboxIndex(i)}>
+                          <Maximize2 size={14} /> View
+                        </Button>
                         <Button asChild variant="secondary" size="sm" className="gap-1.5 font-sans font-bold shadow-xl">
                           <a href={`/api/scraper/images/${img.id}/download`} download data-testid={`button-download-image-${img.id}`}>
                             <Download size={14} />
@@ -728,6 +757,120 @@ export default function Dashboard() {
         )}
 
       </main>
+
+      {/* ── Lightbox ─────────────────────────────────────────────────────── */}
+      {lightboxImg && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col bg-black/95 backdrop-blur-sm animate-in fade-in duration-150"
+          onClick={closeLightbox}
+        >
+          {/* Top bar */}
+          <div
+            className="flex items-center justify-between px-4 py-3 shrink-0"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <span className="text-xs text-white/50 font-mono">
+              {lightboxIndex! + 1} / {filteredImages.length}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button asChild variant="ghost" size="sm" className="gap-1.5 text-white/80 hover:text-white">
+                <a href={`/api/scraper/images/${lightboxImg.id}/download`} download onClick={(e) => e.stopPropagation()}>
+                  <Download size={14} /> Download
+                </a>
+              </Button>
+              <Button variant="ghost" size="icon" className="text-white/60 hover:text-white h-8 w-8" onClick={closeLightbox}>
+                <X size={18} />
+              </Button>
+            </div>
+          </div>
+
+          {/* Image area */}
+          <div className="flex-1 flex items-center justify-center relative min-h-0 px-14">
+            {/* Prev */}
+            {lightboxIndex! > 0 && (
+              <button
+                className="absolute left-2 top-1/2 -translate-y-1/2 z-10 rounded-full bg-white/10 hover:bg-white/20 p-2 text-white transition-colors"
+                onClick={(e) => { e.stopPropagation(); lightboxPrev(); }}
+              >
+                <ChevronLeft size={24} />
+              </button>
+            )}
+
+            <img
+              key={lightboxImg.id}
+              src={`/api/scraper/images/${lightboxImg.id}/download`}
+              alt={lightboxImg.alt || ""}
+              className="max-w-full max-h-full object-contain animate-in zoom-in-95 duration-150"
+              onClick={(e) => e.stopPropagation()}
+            />
+
+            {/* Next */}
+            {lightboxIndex! < filteredImages.length - 1 && (
+              <button
+                className="absolute right-2 top-1/2 -translate-y-1/2 z-10 rounded-full bg-white/10 hover:bg-white/20 p-2 text-white transition-colors"
+                onClick={(e) => { e.stopPropagation(); lightboxNext(); }}
+              >
+                <ChevronRight size={24} />
+              </button>
+            )}
+          </div>
+
+          {/* Bottom info bar */}
+          <div
+            className="shrink-0 px-5 py-3 flex flex-col gap-2 bg-black/60 border-t border-white/10 text-xs"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-white/50">
+              {lightboxImg.alt && (
+                <span className="italic truncate max-w-sm" title={lightboxImg.alt}>"{lightboxImg.alt}"</span>
+              )}
+              {lightboxImg.width && lightboxImg.height && (
+                <span>{lightboxImg.width} × {lightboxImg.height}px</span>
+              )}
+              <a
+                href={lightboxImg.sourcePageUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1 text-primary/70 hover:text-primary truncate max-w-xs"
+                title={lightboxImg.sourcePageUrl}
+              >
+                <ExternalLink size={11} /> Source page
+              </a>
+              <a
+                href={lightboxImg.url}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1 text-primary/70 hover:text-primary truncate max-w-xs"
+                title={lightboxImg.url}
+              >
+                <ExternalLink size={11} /> Image URL
+              </a>
+            </div>
+
+            {/* Related videos from same source page */}
+            {lightboxVideos.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-white/10">
+                <span className="text-white/40 flex items-center gap-1 shrink-0">
+                  <Film size={11} /> Video{lightboxVideos.length > 1 ? "s" : ""} on this page:
+                </span>
+                {lightboxVideos.map((v) => (
+                  <a
+                    key={v.id}
+                    href={v.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1 text-primary hover:text-primary/80 underline underline-offset-2 font-mono truncate max-w-xs"
+                    title={v.url}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Film size={11} /> {v.filename}
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
