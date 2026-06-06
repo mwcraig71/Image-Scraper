@@ -48,7 +48,7 @@ export default function Dashboard() {
       window.history.replaceState({}, "", window.location.pathname + (newSearch ? `?${newSearch}` : ""));
       // auto-verify after state settles
       setTimeout(() => {
-        verifyLogin.mutate({ data: { cookies: captured } });
+        verifyLogin.mutate({ data: { cookies: captured, targetUrl: targetUrl.trim() || undefined } });
       }, 100);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -368,7 +368,7 @@ export default function Dashboard() {
                   <div className="flex items-start gap-1.5 mt-0.5 bg-amber-500/10 border border-amber-500/20 rounded px-2.5 py-2 text-amber-400">
                     <AlertCircle size={12} className="mt-0.5 shrink-0" />
                     <span>
-                      The bookmarklet can only capture non-HttpOnly cookies. If verify still fails, use the Network tab method which captures all cookies including <code>ips4_IPSSessionFront</code>.
+                      The bookmarklet can only capture non-HttpOnly cookies. If verify still fails, use the Network tab method — it captures <strong>all</strong> cookies, including the HttpOnly session cookies that browsers hide from the console.
                     </span>
                   </div>
                 </div>
@@ -408,7 +408,7 @@ export default function Dashboard() {
                         size="sm"
                         className="text-xs h-7 gap-1.5 border-primary/40 text-primary hover:border-primary"
                         disabled={verifyLogin.isPending}
-                        onClick={() => verifyLogin.mutate({ data: { cookies: cookies.trim() } })}
+                        onClick={() => verifyLogin.mutate({ data: { cookies: cookies.trim(), targetUrl: targetUrl.trim() || undefined } })}
                         data-testid="button-verify-login"
                       >
                         {verifyLogin.isPending

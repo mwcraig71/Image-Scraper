@@ -48,7 +48,8 @@ export const StartScrapeResponse = zod.object({
  * @summary Verify that provided cookies grant authenticated access
  */
 export const VerifyLoginBody = zod.object({
-  "cookies": zod.string().optional().describe('Raw Cookie header value to test')
+  "cookies": zod.string().optional().describe('Raw Cookie header value to test'),
+  "targetUrl": zod.string().optional().describe('Full URL of the site to test the cookies against')
 })
 
 export const VerifyLoginResponse = zod.object({

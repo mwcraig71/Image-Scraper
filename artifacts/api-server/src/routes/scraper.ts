@@ -558,65 +558,137 @@ async function crawl(sessionId: string, targetUrl: string, maxPages: number, min
   }
 }
 
+/** Generic login-state signals from a parsed page. */
+function detectLoginSignals($: cheerio.CheerioAPI) {
+  // Logout / sign-out indicators — strong signal of being authenticated.
+  // Scoped to actual links/buttons (not body text) to avoid false positives
+  // from help/FAQ content that merely mentions "log out".
+  const hasLogout =
+    $('a[href*="logout"], a[href*="signout"], a[href*="sign-out"], a[href*="do=logout"], button[name*="logout"], form[action*="logout"]').length > 0;
+
+  // Login / sign-in indicators — present for guests
+  const hasLogin =
+    $('a[href*="login"], a[href*="signin"], a[href*="sign-in"], a[href*="controller=login"]').length > 0 ||
+    $('input[type="password"]').length > 0 ||
+    $('form[action*="login"], form[action*="signin"]').length > 0;
+
+  // Account / profile indicators — common when authenticated
+  const hasAccount =
+    $('a[href*="account"], a[href*="profile"], a[href*="/user/"], a[href*="myaccount"]').length > 0;
+
+  // Username extraction — IPS4 selectors first, then generic
+  const username =
+    $(".cUserLink").first().text().trim() ||
+    $(".ipsUserPhoto[alt]").first().attr("alt")?.trim() ||
+    $('[data-ipsMenu] .ipsUserPhoto').first().attr("alt")?.trim() ||
+    $('[class*="username"], [class*="user-name"], [class*="userName"]').first().text().trim() ||
+    null;
+
+  return { hasLogout, hasLogin, hasAccount, username };
+}
+
 // POST /api/scraper/verify-login — test whether provided cookies grant authenticated access
 router.post("/scraper/verify-login", async (req: Request, res: Response) => {
-  const body = req.body as { cookies?: string } | undefined;
+  const body = req.body as { cookies?: string; targetUrl?: string } | undefined;
   const cookies = typeof body?.cookies === "string" ? body.cookies.trim() : "";
+  const rawTarget = typeof body?.targetUrl === "string" ? body.targetUrl.trim() : "";
+
+  if (!cookies) {
+    res.json({
+      loggedIn: false,
+      username: null,
+      message: "No cookies provided. Paste the Cookie value from your browser's Network tab to test login.",
+    });
+    return;
+  }
+
+  // Prefer the URL the user is about to scrape (sent in the request); fall back to
+  // the active scrape target, then a last-resort default.
+  let verifyTarget: string;
+  try {
+    verifyTarget = rawTarget
+      ? new URL(rawTarget).toString()
+      : (state.targetUrl ?? "https://www.thecandidplanet.com/");
+  } catch {
+    res.status(400).json({
+      loggedIn: false,
+      username: null,
+      message: "Invalid target URL — enter a full URL including https:// before verifying.",
+    });
+    return;
+  }
 
   try {
-    const verifyTarget = state.targetUrl ?? "https://www.thecandidplanet.com/";
-    const response = await axios.get(verifyTarget, {
-      timeout: REQUEST_TIMEOUT,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; ImageScraper/1.0)",
-        Accept: "text/html,application/xhtml+xml",
-        ...(cookies ? { Cookie: cookies } : {}),
-      },
-      maxRedirects: 5,
-    });
 
-    const html = response.data as string;
-    const $ = cheerio.load(html);
+    // Fetch both the guest view (no cookies) and the authenticated view (with cookies)
+    // so we can detect login state generically — by how the page DIFFERS — rather than
+    // relying on any single site's cookie names.
+    const baseHeaders = {
+      "User-Agent": USER_AGENTS[1],
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.9",
+    };
 
-    // ── IPS4 login detection ─────────────────────────────────────────────────
-    // IPS4 injects a logout link when authenticated
-    const hasLogoutLink =
-      $('a[href*="do=logout"]').length > 0 ||
-      $('a[href*="&do=logout"]').length > 0;
+    const [authedResp, guestResp] = await Promise.allSettled([
+      axios.get<string>(verifyTarget, {
+        timeout: REQUEST_TIMEOUT,
+        headers: { ...baseHeaders, Cookie: cookies },
+        maxRedirects: 5,
+      }),
+      axios.get<string>(verifyTarget, {
+        timeout: REQUEST_TIMEOUT,
+        headers: baseHeaders,
+        maxRedirects: 5,
+      }),
+    ]);
 
-    // IPS4 renders a login/register link for guests
-    const hasLoginLink =
-      $('a[href*="app=core&module=system&controller=login"]').length > 0 ||
-      $('a[href*="controller=login"]').length > 0;
+    if (authedResp.status === "rejected") {
+      throw authedResp.reason;
+    }
 
-    // IPS4 embeds the member username in several places when logged in
-    const username =
-      $(".cUserLink").first().text().trim() ||
-      $(".ipsUserPhoto[alt]").first().attr("alt")?.trim() ||
-      $('[data-ipsMenu] .ipsUserPhoto').first().attr("alt")?.trim() ||
-      null;
+    const authed = detectLoginSignals(cheerio.load(authedResp.value.data));
+    const guest =
+      guestResp.status === "fulfilled"
+        ? detectLoginSignals(cheerio.load(guestResp.value.data))
+        : null;
 
-    // Cookie-level hint: IPS4 sets ips4_member_id for authenticated sessions
-    const hasMemberIdCookie = /ips4_member_id\s*=\s*[^;]+/.test(cookies);
-    const hasSessionCookie = /ips4_IPSSessionFront\s*=\s*[^;]+/.test(cookies);
+    // IPS4 bonus signal (kept as an extra positive hint, not a requirement)
+    const ips4Authed = /ips4_member_id\s*=\s*[^;]+/.test(cookies) && /ips4_IPSSessionFront\s*=\s*[^;]+/.test(cookies);
 
-    const loggedIn = hasLogoutLink || (hasMemberIdCookie && hasSessionCookie) || (!hasLoginLink && (hasMemberIdCookie || username !== null));
+    let loggedIn = false;
+    let inconclusive = false;
+    if (authed.hasLogout) {
+      // Logout affordance present in authed view → almost certainly logged in
+      loggedIn = true;
+    } else if (guest) {
+      // Compare against guest view: login affordance disappeared, or account/username appeared
+      const loginDisappeared = guest.hasLogin && !authed.hasLogin;
+      const accountAppeared = !guest.hasAccount && authed.hasAccount;
+      const usernameAppeared = !guest.username && authed.username !== null;
+      loggedIn = loginDisappeared || accountAppeared || usernameAppeared || ips4Authed;
+    } else if (ips4Authed) {
+      // Guest fetch failed but the platform's authenticated cookie pair is present
+      loggedIn = true;
+    } else {
+      // Guest fetch failed and no strong signal — can't compare, so report inconclusive
+      inconclusive = true;
+    }
 
     let message: string;
     if (loggedIn) {
-      message = `Authenticated${username ? ` as "${username}"` : ""}`;
-    } else if (!hasSessionCookie && !hasMemberIdCookie) {
+      message = `Authenticated${authed.username ? ` as "${authed.username}"` : ""}. Cookies look valid.`;
+    } else if (inconclusive) {
       message =
-        "Session cookies not found in what you pasted. " +
-        "Make sure to copy the Cookie value from the Network tab (not the browser console) — " +
-        "the console omits HttpOnly cookies like ips4_IPSSessionFront that are required to log in.";
+        "Couldn't confirm login state — the guest comparison request failed, so the result is inconclusive. " +
+        "The cookies may still work; try starting the scrape, or re-test in a moment.";
     } else {
       message =
-        "The site returned a guest view. Your session may have expired — " +
-        "try logging in again and copying fresh cookies from the Network tab.";
+        "The site still returned a guest view with these cookies. " +
+        "Copy the full Cookie value from your browser's Network tab (not the console — it omits HttpOnly session cookies), " +
+        "and make sure your login session hasn't expired.";
     }
 
-    res.json({ loggedIn, username: username || null, message });
+    res.json({ loggedIn, username: authed.username || null, message });
   } catch (err) {
     res.status(502).json({
       loggedIn: false,

@@ -82,6 +82,8 @@ export interface ScrapedImage {
 export interface VerifyLoginRequest {
   /** Raw Cookie header value to test */
   cookies?: string;
+  /** Full URL of the site to test the cookies against */
+  targetUrl?: string;
 }
 
 export interface LoginVerifyResult {
