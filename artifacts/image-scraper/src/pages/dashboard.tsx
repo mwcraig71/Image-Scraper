@@ -159,6 +159,36 @@ export default function Dashboard() {
     });
   }, [imagesData, minSize]);
 
+  // ── gallery virtual window (only render visible images) ──────────────────
+  const PAGE_SIZE = 48;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  // Reset window when the list itself changes (new scrape or filter change)
+  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [filteredImages]);
+
+  // Grow the window automatically as the user scrolls toward the bottom
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setVisibleCount((n) => Math.min(n + PAGE_SIZE, filteredImages.length));
+        }
+      },
+      { rootMargin: "300px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [filteredImages.length]);
+
+  // The slice rendered in the DOM — indices match filteredImages exactly (from 0)
+  const visibleImages = useMemo(
+    () => filteredImages.slice(0, visibleCount),
+    [filteredImages, visibleCount],
+  );
+
   // ── lightbox ──────────────────────────────────────────────────────────────
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const lightboxImg = lightboxIndex !== null ? filteredImages[lightboxIndex] : null;
@@ -619,8 +649,8 @@ export default function Dashboard() {
           )}
 
           {filteredImages.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pb-20">
-              {filteredImages.map((img, i) => {
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pb-4">
+              {visibleImages.map((img, i) => {
                 const isSelected = selectedIds.has(img.id);
                 return (
                   <Card
@@ -705,6 +735,24 @@ export default function Dashboard() {
                   </Card>
                 );
               })}
+            </div>
+          )}
+
+          {/* Infinite-scroll sentinel + count indicator */}
+          {filteredImages.length > 0 && (
+            <div className="pb-6">
+              {visibleCount < filteredImages.length ? (
+                <div ref={sentinelRef} className="flex flex-col items-center gap-2 py-6 text-muted-foreground text-xs">
+                  <Loader2 size={18} className="animate-spin" />
+                  <span>Showing {visibleCount} of {filteredImages.length} — scroll for more</span>
+                </div>
+              ) : (
+                filteredImages.length > PAGE_SIZE && (
+                  <p className="text-center text-xs text-muted-foreground py-3">
+                    All {filteredImages.length} images shown
+                  </p>
+                )
+              )}
             </div>
           )}
 
