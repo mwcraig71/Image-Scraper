@@ -241,10 +241,25 @@ function extractCssImageUrls(css: string, base: string): string[] {
   return urls;
 }
 
+/** Compute a canonical dedup key: origin + pathname, no query string or fragment.
+ *  This collapses the same image served with different resize/cache/auth params
+ *  (e.g. photo.jpg?w=300, photo.jpg?_key=abc, photo.jpg) into one entry. */
+function imagePathKey(url: string): string {
+  try {
+    const u = new URL(url);
+    u.search = "";
+    u.hash = "";
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
 function addImage(
   url: string,
   sourcePageUrl: string,
   imageUrls: Set<string>,
+  imagePathKeys: Set<string>,
   sessionId: string,
   minDimension: number,
   alt: string | null = null,
@@ -259,7 +274,11 @@ function addImage(
   if (minDimension > 0 && width !== null && height !== null) {
     if (width < minDimension || height < minDimension) return;
   }
-  if (!imageUrls.has(url)) {
+  // Deduplicate on canonical path (no query/fragment) so the same image
+  // served with different resize/cache/auth params is only stored once.
+  const key = imagePathKey(url);
+  if (!imagePathKeys.has(key)) {
+    imagePathKeys.add(key);
     imageUrls.add(url);
     state.images.push({ id: randomUUID(), url, sourcePageUrl, alt, width, height });
     state.imagesFound += 1;
@@ -334,6 +353,7 @@ async function crawl(sessionId: string, targetUrl: string, maxPages: number, min
 
   const visited = new Set<string>();
   const imageUrls = new Set<string>();
+  const imagePathKeys = new Set<string>(); // origin+pathname dedup (strips query/fragment)
   const videoUrls = new Set<string>();
   const queue: string[] = [targetUrl];
 
@@ -402,7 +422,7 @@ async function crawl(sessionId: string, targetUrl: string, maxPages: number, min
             const normalized = normalizeImageUrl(src, pageUrl);
             if (normalized && isImageUrl(normalized)) {
               if (w && h) {
-                addImage(normalized, pageUrl, imageUrls, sessionId, minDimension, alt, w, h);
+                addImage(normalized, pageUrl, imageUrls, imagePathKeys, sessionId, minDimension, alt, w, h);
               } else {
                 queueUnknown(normalized, alt);
               }
@@ -595,12 +615,12 @@ async function crawl(sessionId: string, targetUrl: string, maxPages: number, min
                 // Must verify actual size — probe the image header bytes
                 const dims = await probeImageDimensions(url, axiosInstance);
                 if (dims) {
-                  addImage(url, pageUrl, imageUrls, sessionId, minDimension, alt, dims.width, dims.height);
+                  addImage(url, pageUrl, imageUrls, imagePathKeys, sessionId, minDimension, alt, dims.width, dims.height);
                 }
                 // dims === null → can't determine size → skip (conservative)
               } else {
                 // No size filter — add without probing
-                addImage(url, pageUrl, imageUrls, sessionId, 0, alt, null, null);
+                addImage(url, pageUrl, imageUrls, imagePathKeys, sessionId, 0, alt, null, null);
               }
             }),
           );
