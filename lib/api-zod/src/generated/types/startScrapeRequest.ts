@@ -21,4 +21,8 @@ export interface StartScrapeRequest {
   minDimension?: number;
   /** Raw Cookie header value to send with every request (e.g. "session_id=abc; other=xyz"). Lets the scraper access pages that require a login. */
   cookies?: string;
+  /** When true, the crawl follows links across all subdomains of the target's registrable domain. */
+  includeSubdomains?: boolean;
+  /** When true, pages are rendered with a headless browser (Playwright) so JS-injected and lazy-loaded media is captured. Falls back to static fetch if Playwright is unavailable. */
+  renderJs?: boolean;
 }

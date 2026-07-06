@@ -33,7 +33,9 @@ export const StartScrapeBody = zod.object({
   "targetUrl": zod.string().optional().describe('Starting URL for the crawl. The scraper will stay within the same hostname.'),
   "maxPages": zod.number().min(startScrapeBodyMaxPagesMin).default(startScrapeBodyMaxPagesDefault).describe('Maximum pages to crawl. 0 means unlimited.'),
   "minDimension": zod.number().min(startScrapeBodyMinDimensionMin).default(startScrapeBodyMinDimensionDefault).describe('Minimum width AND height (px) an image must have to be collected. 0 means no limit. Only applies when dimensions are known from HTML attributes.'),
-  "cookies": zod.string().optional().describe('Raw Cookie header value to send with every request (e.g. \"session_id=abc; other=xyz\"). Lets the scraper access pages that require a login.')
+  "cookies": zod.string().optional().describe('Raw Cookie header value to send with every request (e.g. \"session_id=abc; other=xyz\"). Lets the scraper access pages that require a login.'),
+  "includeSubdomains": zod.boolean().optional().describe('Follow links across all subdomains of the target registrable domain.'),
+  "renderJs": zod.boolean().optional().describe('Render pages with a headless browser (Playwright) to capture JS-injected/lazy-loaded media.')
 })
 
 export const StartScrapeResponse = zod.object({

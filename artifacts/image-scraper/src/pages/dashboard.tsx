@@ -26,6 +26,9 @@ export default function Dashboard() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [maxPages, setMaxPages] = useState(500);
   const [minScrapeSize, setMinScrapeSize] = useState(0);
+  const [includeSubdomains, setIncludeSubdomains] = useState(false);
+  const [renderJs, setRenderJs] = useState(false);
+  const [selectedVideoIds, setSelectedVideoIds] = useState<Set<string>>(new Set());
   const [targetUrl, setTargetUrl] = useState("");
   const [cookies, setCookies] = useState("");
   const [showCookieInput, setShowCookieInput] = useState(false);
@@ -119,11 +122,12 @@ export default function Dashboard() {
   };
 
   const handleStart = () => {
-    startScrape.mutate({ data: { targetUrl: targetUrl.trim() || undefined, maxPages, minDimension: minScrapeSize, cookies: cookies.trim() || undefined } }, {
+    startScrape.mutate({ data: { targetUrl: targetUrl.trim() || undefined, maxPages, minDimension: minScrapeSize, cookies: cookies.trim() || undefined, includeSubdomains, renderJs } }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetScrapeStatusQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetScrapeImagesQueryKey() });
         setSelectedIds(new Set());
+        setSelectedVideoIds(new Set());
       }
     });
   };
@@ -134,6 +138,7 @@ export default function Dashboard() {
         queryClient.invalidateQueries({ queryKey: getGetScrapeStatusQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetScrapeImagesQueryKey() });
         setSelectedIds(new Set());
+        setSelectedVideoIds(new Set());
       }
     });
   };
@@ -217,6 +222,24 @@ export default function Dashboard() {
     const ids = [...selectedIds].join(",");
     return `/api/scraper/download-zip?ids=${encodeURIComponent(ids)}`;
   }, [selectedIds, selectedCount]);
+
+  // ── video selection ───────────────────────────────────────────────────────
+  const videos = videosData ?? [];
+  const toggleVideoSelect = useCallback((id: string) => {
+    setSelectedVideoIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+  const selectedVideoCount = selectedVideoIds.size;
+  const allVideosSelected = videos.length > 0 && videos.every((v) => selectedVideoIds.has(v.id));
+  const selectAllVideos = () => setSelectedVideoIds(new Set(videos.map((v) => v.id)));
+  const clearVideoSelection = () => setSelectedVideoIds(new Set());
+  const selectedVideosZipUrl = useMemo(() => {
+    if (selectedVideoCount === 0) return null;
+    return `/api/scraper/download-videos-zip?ids=${encodeURIComponent([...selectedVideoIds].join(","))}`;
+  }, [selectedVideoIds, selectedVideoCount]);
 
   return (
     <div className="min-h-screen bg-background text-foreground font-mono flex flex-col items-center">
@@ -302,6 +325,31 @@ export default function Dashboard() {
               className="w-16 bg-transparent border border-border/60 rounded px-2 py-0.5 text-foreground text-right focus:outline-none focus:border-primary/60 disabled:opacity-40"
               data-testid="input-max-pages"
             />
+          </div>
+
+          <div className="flex items-center gap-3 bg-card border border-border/60 rounded px-2.5 py-1 text-xs">
+            <label className="flex items-center gap-1.5 cursor-pointer select-none" title="Follow links across subdomains (cdn., blog., etc.) of the same site.">
+              <input
+                type="checkbox"
+                checked={includeSubdomains}
+                onChange={(e) => setIncludeSubdomains(e.target.checked)}
+                disabled={isRunning}
+                className="accent-primary"
+                data-testid="toggle-subdomains"
+              />
+              <span className="text-muted-foreground whitespace-nowrap">Subdomains</span>
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer select-none" title="Render pages with a headless browser to capture JavaScript-loaded images/videos. Slower; requires Playwright installed on the server.">
+              <input
+                type="checkbox"
+                checked={renderJs}
+                onChange={(e) => setRenderJs(e.target.checked)}
+                disabled={isRunning}
+                className="accent-primary"
+                data-testid="toggle-render-js"
+              />
+              <span className="text-muted-foreground whitespace-nowrap">Render JS</span>
+            </label>
           </div>
 
           {isRunning ? (
@@ -768,25 +816,55 @@ export default function Dashboard() {
                 Discovered Videos
               </h2>
               <span className="text-xs text-muted-foreground font-normal ml-1">
-                {videosData?.length ?? 0} total
+                {videos.length} total
               </span>
-              {(videosData?.length ?? 0) > 0 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-xs gap-1.5 ml-auto"
-                  onClick={() => {
-                    const lines = videosData!.map((v) => v.url).join("\n");
-                    const blob = new Blob([lines], { type: "text/plain" });
-                    const a = document.createElement("a");
-                    a.href = URL.createObjectURL(blob);
-                    a.download = "video-links.txt";
-                    a.click();
-                    URL.revokeObjectURL(a.href);
-                  }}
-                >
-                  <Download size={12} /> Download All Links (.txt)
-                </Button>
+              {videos.length > 0 && (
+                <div className="flex items-center gap-2 flex-wrap ml-auto">
+                  {selectedVideoCount > 0 && (
+                    <span className="text-xs text-muted-foreground">{selectedVideoCount} selected</span>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1.5 text-xs font-sans h-7 px-2 border border-border/50"
+                    onClick={allVideosSelected ? clearVideoSelection : selectAllVideos}
+                    data-testid="button-select-all-videos"
+                  >
+                    {allVideosSelected
+                      ? <><CheckSquare size={13} /> Deselect All</>
+                      : <><Square size={13} /> Select All</>}
+                  </Button>
+                  {selectedVideoCount > 0 && (
+                    <Button asChild variant="default" size="sm" className="h-7 text-xs gap-1.5 font-sans font-bold">
+                      <a href={selectedVideosZipUrl!} download="selected-videos.zip" data-testid="button-download-selected-videos">
+                        <DownloadCloud size={13} /> Download Selected ({selectedVideoCount})
+                      </a>
+                    </Button>
+                  )}
+                  {selectedVideoCount === 0 && (
+                    <Button asChild variant="outline" size="sm" className="h-7 text-xs gap-1.5">
+                      <a href="/api/scraper/download-videos-zip" download="scraped-videos.zip" data-testid="button-download-all-videos">
+                        <DownloadCloud size={13} /> Download All ZIP
+                      </a>
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs gap-1.5"
+                    onClick={() => {
+                      const lines = videos.map((v) => v.url).join("\n");
+                      const blob = new Blob([lines], { type: "text/plain" });
+                      const a = document.createElement("a");
+                      a.href = URL.createObjectURL(blob);
+                      a.download = "video-links.txt";
+                      a.click();
+                      URL.revokeObjectURL(a.href);
+                    }}
+                  >
+                    <Download size={12} /> Links (.txt)
+                  </Button>
+                </div>
               )}
             </div>
 
@@ -794,10 +872,26 @@ export default function Dashboard() {
               <p className="text-xs text-muted-foreground">Scanning for video links…</p>
             )}
 
-            {(videosData?.length ?? 0) > 0 && (
+            {videos.length > 0 && (
               <div className="flex flex-col divide-y divide-border/40">
-                {videosData!.map((vid) => (
-                  <div key={vid.id} className="flex items-center gap-3 py-2.5 group">
+                {videos.map((vid) => {
+                  const isSel = selectedVideoIds.has(vid.id);
+                  return (
+                  <div
+                    key={vid.id}
+                    className={`flex items-center gap-3 py-2.5 group cursor-pointer transition-colors rounded px-1 ${isSel ? "bg-primary/10" : "hover:bg-muted/20"}`}
+                    onClick={() => toggleVideoSelect(vid.id)}
+                  >
+                    <button
+                      type="button"
+                      className="shrink-0"
+                      onClick={(e) => { e.stopPropagation(); toggleVideoSelect(vid.id); }}
+                      data-testid={`checkbox-video-${vid.id}`}
+                    >
+                      {isSel
+                        ? <CheckSquare size={16} className="text-primary" />
+                        : <Square size={16} className="text-muted-foreground/60" />}
+                    </button>
                     <Film size={14} className="text-muted-foreground shrink-0" />
                     <div className="flex flex-col gap-0.5 flex-1 min-w-0">
                       <span className="text-xs font-mono text-foreground truncate" title={vid.filename}>
@@ -809,24 +903,26 @@ export default function Dashboard() {
                         rel="noreferrer"
                         className="text-[10px] text-muted-foreground hover:text-primary truncate"
                         title={vid.sourcePageUrl}
+                        onClick={(e) => e.stopPropagation()}
                       >
                         {vid.sourcePageUrl}
                       </a>
                     </div>
-                    <div className="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
                       <Button asChild variant="ghost" size="sm" className="h-7 text-xs gap-1">
                         <a href={vid.url} target="_blank" rel="noreferrer">
                           <ExternalLink size={12} /> Open
                         </a>
                       </Button>
                       <Button asChild variant="secondary" size="sm" className="h-7 text-xs gap-1">
-                        <a href={vid.url} download>
+                        <a href={`/api/scraper/videos/${vid.id}/download`} download data-testid={`button-download-video-${vid.id}`}>
                           <Download size={12} /> Download
                         </a>
                       </Button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </section>
